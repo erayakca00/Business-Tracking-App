@@ -1,0 +1,44 @@
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
+import * as fs from 'fs';
+
+async function bootstrap() {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Create uploads directory if it doesn't exist
+  const uploadDir = join(__dirname, '..', 'uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  // Serve static files from the uploads directory
+  app.useStaticAssets(uploadDir, {
+    prefix: '/uploads/',
+  });
+
+  // Enable CORS
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN?.split(',') || '*',
+    credentials: true,
+  });
+
+  // Global validation pipe
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  // API prefix
+  app.setGlobalPrefix(process.env.API_PREFIX || 'api/v1');
+
+  // Listen on 0.0.0.0 to accept connections from other devices (Mobile)
+  await app.listen(process.env.PORT || 3000, '0.0.0.0');
+  console.log(`Application is running on: http://localhost:${process.env.PORT || 3000}`);
+}
+bootstrap();

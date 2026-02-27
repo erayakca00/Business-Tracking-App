@@ -1,0 +1,380 @@
+import { useEffect, useState, useMemo } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { Plus, UserPlus, LayoutGrid, List as ListIcon, ArrowLeft } from 'lucide-react';
+import api from '../services/api';
+import CreateTaskModal from '../components/CreateTaskModal';
+import AddMemberModal from '../components/AddMemberModal';
+import TaskDetailPanel from '../components/TaskDetailPanel';
+import { useAuth } from '../context/AuthContext';
+import TaskBoard from '../components/TaskBoard';
+import TaskList from '../components/TaskList';
+import NotificationBell from '../components/NotificationBell';
+
+const GroupDetails = () => {
+    const { groupId } = useParams<{ groupId: string }>();
+
+    const { user } = useAuth();
+
+    const [group, setGroup] = useState<any>(null);
+    const [tasks, setTasks] = useState<any[]>([]);
+    const [members, setMembers] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState<any>(null);
+    const [selectedTask, setSelectedTask] = useState<any>(null);
+    const [tagFilter, setTagFilter] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'title' | 'tag' | 'createdAt' | 'updatedAt' | 'dueDate' | 'priority' | 'status'>('createdAt');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+    const fetchData = async () => {
+        try {
+            const [groupRes, tasksRes, membersRes] = await Promise.all([
+                api.get(`/groups/${groupId}`),
+                api.get(`/groups/${groupId}/tasks`),
+                api.get(`/groups/${groupId}/users`),
+            ]);
+
+            setGroup(groupRes.data);
+            setTasks(tasksRes.data);
+            setMembers(membersRes.data);
+        } catch (error) {
+            console.error('Failed to fetch group details', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, [groupId]);
+
+    const [searchParams, setSearchParams] = useSearchParams();
+    const queryTaskId = searchParams.get('taskId');
+
+    useEffect(() => {
+        if (queryTaskId && tasks.length > 0) {
+            const t = tasks.find((task: any) => task.id === queryTaskId);
+            if (t && (!selectedTask || t.id !== (selectedTask as any).id)) {
+                setSelectedTask(t);
+
+                // Clear the parameter so closing the modal doesn't immediately reopen it
+                const newParams = new URLSearchParams(searchParams);
+                newParams.delete('taskId');
+                setSearchParams(newParams, { replace: true });
+            }
+        }
+    }, [queryTaskId, tasks, searchParams, setSearchParams, selectedTask]);
+
+    const handleCreateTask = () => {
+        setEditingTask(null);
+        setIsTaskModalOpen(true);
+    };
+
+    const handleEditTask = (task: any) => {
+        setEditingTask(task);
+        setIsTaskModalOpen(true);
+    };
+
+    const handleDeleteTask = async (taskId: string) => {
+        if (!window.confirm('Are you sure you want to delete this task?')) return;
+        try {
+            await api.delete(`/tasks/${taskId}`);
+            fetchData();
+        } catch (error) {
+            console.error('Failed to delete task', error);
+        }
+    };
+
+
+
+
+
+    const currentUserRole = members.find((m: any) => m.userId === user?.id)?.role;
+    const isAdmin = currentUserRole === 'admin';
+
+    const uniqueTags = Array.from(new Set(tasks.map((t: any) => t.projectTag).filter(Boolean)));
+
+    const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const statusOrder: Record<string, number> = { todo: 0, in_progress: 1, review: 2, done: 3, blocked: 4 };
+
+    const filteredTasks = useMemo(() => {
+        let base = tagFilter ? tasks.filter((t: any) => t.projectTag === tagFilter) : tasks;
+
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            base = base.filter((t: any) =>
+                t.title.toLowerCase().includes(query) ||
+                (t.description && t.description.toLowerCase().includes(query))
+            );
+        }
+
+        return [...base].sort((a: any, b: any) => {
+            let cmp = 0;
+            if (sortBy === 'title') cmp = (a.title || '').localeCompare(b.title || '');
+            else if (sortBy === 'tag') cmp = (a.projectTag || '').localeCompare(b.projectTag || '');
+            else if (sortBy === 'priority') cmp = (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
+            else if (sortBy === 'status') cmp = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+            else {
+                const da = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
+                const db = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
+                cmp = da - db;
+            }
+            return sortDir === 'asc' ? cmp : -cmp;
+        });
+    }, [tasks, tagFilter, searchQuery, sortBy, sortDir]);
+
+    const handleSortChange = (column: string) => {
+        if (sortBy === column as any) {
+            setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(column as any);
+            setSortDir('asc');
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+        );
+    }
+
+    if (!group) {
+        return <div className="text-center py-10">Group not found</div>;
+    }
+
+    return (
+        <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 transition-colors duration-200 overflow-hidden">
+            {/* Header */}
+            <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex-shrink-0 z-10 shadow-sm transition-colors duration-200">
+                <div className="flex justify-between items-center max-w-7xl mx-auto w-full">
+                    <div className="flex items-center">
+                        <Link to="/dashboard" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors mr-3 flex-shrink-0 self-center">
+                            <ArrowLeft size={24} className="text-gray-600 dark:text-gray-300" />
+                        </Link>
+                        <div>
+                            <div className="flex items-center space-x-3">
+                                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{group?.name}</h1>
+                                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-xs font-semibold rounded-full uppercase tracking-wider">
+                                    {group?.tasks?.length || 0} Tasks
+                                </span>
+                                {isAdmin && (
+                                    <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 text-[10px] font-bold rounded uppercase">
+                                        Admin
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{group?.description}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center">
+                        <NotificationBell />
+                    </div>
+                </div>
+            </header>
+
+            {/* Main Content */}
+            <div className="flex-1 overflow-hidden relative">
+                <main className="h-full w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
+                    {/* Toolbar */}
+                    <div className="mb-6 flex justify-between items-center flex-shrink-0">
+                        <div className="flex items-center space-x-4 bg-white dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm transition-colors duration-200">
+                            <button
+                                onClick={() => setViewMode('board')}
+                                className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'board' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                            >
+                                <LayoutGrid size={16} />
+                                <span>Board</span>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                            >
+                                <ListIcon size={16} />
+                                <span>List</span>
+                            </button>
+                        </div>
+
+                        <div className="flex items-center space-x-3">
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setIsMemberModalOpen(true)}
+                                    className="flex items-center px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                >
+                                    <UserPlus size={18} className="mr-2" />
+                                    Add Member
+                                </button>
+                            )}
+                            <button
+                                onClick={handleCreateTask}
+                                className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-all hover:shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                            >
+                                <Plus size={18} className="mr-2" />
+                                New Task
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 mb-4 flex-shrink-0">
+                        {/* Search Bar */}
+                        <div className="relative flex-1 max-w-md">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg className="h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Search tasks..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="block w-full pl-10 pr-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg leading-5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors duration-200"
+                            />
+                        </div>
+
+                        {/* Project Tag Filter */}
+                        {uniqueTags.length > 0 && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                    onClick={() => setTagFilter(null)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tagFilter === null
+                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                        }`}
+                                >
+                                    All
+                                </button>
+                                {uniqueTags.map((tag: any) => (
+                                    <button
+                                        key={tag}
+                                        onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tagFilter === tag
+                                            ? 'bg-indigo-600 text-white shadow-sm'
+                                            : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
+                                            }`}
+                                    >
+                                        📁 {tag}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <span className="text-xs text-gray-400 dark:text-gray-500 mt-2 sm:mt-0 sm:ml-auto self-center">
+                            {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+
+                    {/* View Area */}
+                    <div className="flex-1 min-h-0 relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md overflow-hidden transition-colors duration-200">
+                        {isLoading ? (
+                            <div className="flex items-center justify-center h-full">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+                            </div>
+                        ) : tasks.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                                <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-full mb-4">
+                                    <LayoutGrid size={32} className="text-gray-400 dark:text-gray-500" />
+                                </div>
+                                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No tasks yet</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
+                                    Get started by creating your first task for this group.
+                                </p>
+                                <button
+                                    onClick={handleCreateTask}
+                                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                                >
+                                    <Plus size={18} className="mr-2" />
+                                    Create Task
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="h-full overflow-hidden">
+                                {viewMode === 'board' ? (
+                                    <div className="h-full p-6 overflow-x-auto">
+                                        <TaskBoard
+                                            tasks={filteredTasks}
+                                            members={members}
+                                            onEdit={handleEditTask}
+                                            onDelete={handleDeleteTask}
+                                            onViewDetail={setSelectedTask}
+                                            isAdmin={isAdmin}
+                                            currentUserId={user?.id}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col">
+                                        <TaskList
+                                            tasks={filteredTasks}
+                                            members={members}
+                                            onEdit={handleEditTask}
+                                            onDelete={handleDeleteTask}
+                                            onViewDetail={setSelectedTask}
+                                            onBulkStatusChange={async (taskIds, status) => {
+                                                try {
+                                                    await Promise.all(taskIds.map(id => api.patch(`/tasks/${id}`, { status })));
+                                                    fetchData();
+                                                } catch (error) {
+                                                    console.error('Failed to bulk update status', error);
+                                                }
+                                            }}
+                                            onBulkDelete={async (taskIds) => {
+                                                try {
+                                                    await Promise.all(taskIds.map(id => api.delete(`/tasks/${id}`)));
+                                                    fetchData();
+                                                } catch (error) {
+                                                    console.error('Failed to bulk delete tasks', error);
+                                                }
+                                            }}
+                                            isAdmin={isAdmin}
+                                            sortBy={sortBy}
+                                            sortDir={sortDir}
+                                            onSortChange={handleSortChange}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </main>
+            </div>
+
+            {/* Modals */}
+            <CreateTaskModal
+                isOpen={isTaskModalOpen}
+                onClose={() => setIsTaskModalOpen(false)}
+                groupId={groupId!}
+                onTaskCreated={fetchData}
+                taskToEdit={editingTask}
+                members={members}
+                isAdmin={isAdmin}
+                currentUserId={user?.id}
+                existingTags={uniqueTags as string[]}
+            />
+
+            <AddMemberModal
+                isOpen={isMemberModalOpen}
+                onClose={() => setIsMemberModalOpen(false)}
+                groupId={groupId!}
+                onMemberAdded={fetchData}
+            />
+
+            <TaskDetailPanel
+                task={selectedTask}
+                members={members}
+                isAdmin={isAdmin}
+                currentUserId={user?.id}
+                onClose={() => setSelectedTask(null)}
+                onEdit={(task) => { setSelectedTask(null); handleEditTask(task); }}
+                onDelete={async (taskId) => { await handleDeleteTask(taskId); setSelectedTask(null); }}
+                onTaskUpdated={fetchData}
+            />
+        </div>
+    );
+};
+
+export default GroupDetails;
