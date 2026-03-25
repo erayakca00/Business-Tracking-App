@@ -125,9 +125,9 @@ This project is developed for academic purposes as part of a Software Engineerin
 
 ## 📧 Contact
 
-[Your Name]
-[Your Email]
-[Your University]
+Sıtkı Eray Akça
+erayakca001@gmail.com
+Manisa Celâl Bayar Üniversitesi
 
 ---
 
