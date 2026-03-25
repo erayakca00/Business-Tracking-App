@@ -74,11 +74,18 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                 <div className="flex justify-between items-start mb-2 gap-2">
                                     <div className="flex items-center flex-wrap gap-2">
                                         <h4 className="font-medium text-gray-900 dark:text-white text-sm leading-snug">{task.title}</h4>
-                                        {task.projectTag && (
-                                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
-                                                📁 {task.projectTag}
-                                            </span>
-                                        )}
+                                        <div className="flex gap-1 flex-wrap">
+                                            {task.projectTag && (
+                                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
+                                                    📁 {task.projectTag}
+                                                </span>
+                                            )}
+                                            {!(task as any).assignedTo && !task.assignedToId && (
+                                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800">
+                                                    👤 Unassigned
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                     {canDeleteTask && (
                                         <button

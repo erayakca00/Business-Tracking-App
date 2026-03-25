@@ -8,6 +8,7 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { User } from '../database/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../database/entities/user-group.entity';
+import { Task } from '../database/entities/task.entity';
 
 @Injectable()
 export class GroupsService {
@@ -16,6 +17,8 @@ export class GroupsService {
         private readonly groupRepository: Repository<Group>,
         @InjectRepository(UserGroup)
         private readonly userGroupRepository: Repository<UserGroup>,
+        @InjectRepository(Task)
+        private readonly taskRepository: Repository<Task>,
         private readonly usersService: UsersService,
     ) { }
 
@@ -79,6 +82,11 @@ export class GroupsService {
         if (group.owner.id !== user.id) {
             throw new ForbiddenException('Only the owner can delete the group');
         }
+
+        // Manually delete related entities to prevent foreign key errors 
+        // regardless of current DB constraint structures
+        await this.taskRepository.delete({ groupId: id });
+        await this.userGroupRepository.delete({ groupId: id });
 
         await this.groupRepository.remove(group);
     }
@@ -182,9 +190,11 @@ export class GroupsService {
             throw new NotFoundException('Member not found in this group');
         }
 
-        // Prevent removing the owner (if needed, though logic allows it currently, owner check on group delete handles main owner)
-        // Ideally check if user is removing themselves or another admin? For simplicity, admins can remove anyone except maybe the owner if we enforced it.
-        // Let's simpler logic: success.
+        // Unassign user from all tasks in this group
+        await this.taskRepository.update(
+            { groupId, assignedToId: userId },
+            { assignedToId: null as any, assignedTo: null as any }
+        );
 
         await this.userGroupRepository.remove(memberToRemove);
     }

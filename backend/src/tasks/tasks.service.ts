@@ -131,14 +131,15 @@ export class TasksService {
         });
         const isAdmin = userGroup && userGroup.role === UserRole.ADMIN;
         const isAssignee = task.assignedTo && task.assignedTo.id === user.id;
+        const isCreator = task.createdBy && task.createdBy.id === user.id;
 
-        if (!isAdmin && !isAssignee) {
-            throw new ForbiddenException('You can only edit tasks assigned to you');
+        if (!isAdmin && !isAssignee && !isCreator) {
+            throw new ForbiddenException('You can only edit tasks you created or are assigned to');
         }
 
         if (updateTaskDto.assignedToId !== undefined) {
-            if (!isAdmin) {
-                throw new ForbiddenException('Only group admins can assign tasks');
+            if (!isAdmin && !isCreator) {
+                throw new ForbiddenException('Only group admins or task creators can assign tasks');
             }
 
             if (updateTaskDto.assignedToId === null) {

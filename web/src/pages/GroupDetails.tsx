@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { Plus, UserPlus, LayoutGrid, List as ListIcon, ArrowLeft } from 'lucide-react';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Plus, LayoutGrid, List as ListIcon, ArrowLeft, Settings } from 'lucide-react';
 import api from '../services/api';
 import CreateTaskModal from '../components/CreateTaskModal';
-import AddMemberModal from '../components/AddMemberModal';
+import GroupSettingsModal from '../components/GroupSettingsModal';
 import TaskDetailPanel from '../components/TaskDetailPanel';
 import { useAuth } from '../context/AuthContext';
 import TaskBoard from '../components/TaskBoard';
@@ -12,6 +12,7 @@ import NotificationBell from '../components/NotificationBell';
 
 const GroupDetails = () => {
     const { groupId } = useParams<{ groupId: string }>();
+    const navigate = useNavigate();
 
     const { user } = useAuth();
 
@@ -22,7 +23,7 @@ const GroupDetails = () => {
     const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
 
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-    const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<any>(null);
     const [selectedTask, setSelectedTask] = useState<any>(null);
     const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -93,8 +94,20 @@ const GroupDetails = () => {
 
 
 
+    const handleDeleteGroup = async () => {
+        if (!window.confirm('Are you absolutely sure you want to close and permanently delete this group? All tasks, attachments, and comments will be lost. This cannot be undone.')) return;
+        try {
+            await api.delete(`/groups/${groupId}`);
+            navigate('/dashboard');
+        } catch (error) {
+            console.error('Failed to delete group', error);
+            alert('An error occurred while closing the group.');
+        }
+    };
+
+    const isOwner = group?.owner?.id === user?.id;
     const currentUserRole = members.find((m: any) => m.userId === user?.id)?.role;
-    const isAdmin = currentUserRole === 'admin';
+    const isAdmin = currentUserRole === 'admin' || isOwner;
 
     const uniqueTags = Array.from(new Set(tasks.map((t: any) => t.projectTag).filter(Boolean)));
 
@@ -161,7 +174,7 @@ const GroupDetails = () => {
                             <div className="flex items-center space-x-3">
                                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{group?.name}</h1>
                                 <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-xs font-semibold rounded-full uppercase tracking-wider">
-                                    {group?.tasks?.length || 0} Tasks
+                                    {tasks.length} Tasks
                                 </span>
                                 {isAdmin && (
                                     <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 text-[10px] font-bold rounded uppercase">
@@ -173,7 +186,16 @@ const GroupDetails = () => {
                         </div>
                     </div>
 
-                    <div className="flex items-center">
+                    <div className="flex items-center space-x-4">
+                        {isAdmin && (
+                            <button
+                                onClick={() => setIsSettingsModalOpen(true)}
+                                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                title="Group Settings"
+                            >
+                                <Settings size={20} />
+                            </button>
+                        )}
                         <NotificationBell />
                     </div>
                 </div>
@@ -202,15 +224,7 @@ const GroupDetails = () => {
                         </div>
 
                         <div className="flex items-center space-x-3">
-                            {isAdmin && (
-                                <button
-                                    onClick={() => setIsMemberModalOpen(true)}
-                                    className="flex items-center px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                >
-                                    <UserPlus size={18} className="mr-2" />
-                                    Add Member
-                                </button>
-                            )}
+
                             <button
                                 onClick={handleCreateTask}
                                 className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-all hover:shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -238,22 +252,23 @@ const GroupDetails = () => {
                             />
                         </div>
 
-                        {/* Project Tag Filter */}
-                        {uniqueTags.length > 0 && (
+                        {/* Filters */}
+                        {(uniqueTags.length > 0) && (
                             <div className="flex items-center gap-2 flex-wrap">
                                 <button
-                                    onClick={() => setTagFilter(null)}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tagFilter === null
+                                    onClick={() => { setTagFilter(null); }}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${(tagFilter === null)
                                         ? 'bg-indigo-600 text-white shadow-sm'
                                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                                         }`}
                                 >
                                     All
                                 </button>
+
                                 {uniqueTags.map((tag: any) => (
                                     <button
                                         key={tag}
-                                        onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                                        onClick={() => { setTagFilter(tagFilter === tag ? null : tag); }}
                                         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tagFilter === tag
                                             ? 'bg-indigo-600 text-white shadow-sm'
                                             : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
@@ -356,11 +371,16 @@ const GroupDetails = () => {
                 existingTags={uniqueTags as string[]}
             />
 
-            <AddMemberModal
-                isOpen={isMemberModalOpen}
-                onClose={() => setIsMemberModalOpen(false)}
+            <GroupSettingsModal
+                isOpen={isSettingsModalOpen}
+                onClose={() => setIsSettingsModalOpen(false)}
                 groupId={groupId!}
-                onMemberAdded={fetchData}
+                members={members}
+                isAdmin={isAdmin}
+                isOwner={isOwner}
+                onSettingsChanged={fetchData}
+                onDeleteGroup={handleDeleteGroup}
+                currentUserId={user?.id}
             />
 
             <TaskDetailPanel

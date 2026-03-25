@@ -133,11 +133,21 @@ const TaskList: React.FC<TaskListProps> = ({
                                     {task.description && <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{task.description}</div>}
                                 </td>
                                 <td className="px-4 py-4 whitespace-nowrap">
-                                    {task.projectTag ? (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
-                                            📁 {task.projectTag}
-                                        </span>
-                                    ) : <span className="text-gray-400 text-xs">—</span>}
+                                    <div className="flex gap-1 flex-wrap">
+                                        {task.projectTag && (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
+                                                📁 {task.projectTag}
+                                            </span>
+                                        )}
+                                        {!(task as any).assignedTo && !task.assignedToId && (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800">
+                                                👤 Unassigned
+                                            </span>
+                                        )}
+                                        {!task.projectTag && ((task as any).assignedTo || task.assignedToId) && (
+                                            <span className="text-gray-400 text-xs">—</span>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === 'done' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :

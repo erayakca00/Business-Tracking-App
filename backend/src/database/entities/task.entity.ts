@@ -82,7 +82,7 @@ export class Task {
     @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
     completedAt: Date;
 
-    @ManyToOne(() => Group, (group) => group.tasks)
+    @ManyToOne(() => Group, (group) => group.tasks, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'group_id' })
     group: Group;
 
