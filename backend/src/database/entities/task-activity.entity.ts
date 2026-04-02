@@ -12,6 +12,7 @@ export type ActivityType =
     | 'created'
     | 'status_changed'
     | 'priority_changed'
+    | 'effort_changed'
     | 'assignee_changed'
     | 'due_date_changed'
     | 'tag_changed'

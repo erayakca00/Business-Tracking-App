@@ -185,6 +185,18 @@ export class TasksService {
             await this.logActivity(task.id, user.id, 'tag_changed', { from: task.projectTag || '', to: updateTaskDto.projectTag || '' });
             task.projectTag = updateTaskDto.projectTag;
         }
+        if (updateTaskDto.effort !== undefined && updateTaskDto.effort !== task.effort) {
+            await this.logActivity(task.id, user.id, 'effort_changed', { from: String(task.effort ?? ''), to: String(updateTaskDto.effort) });
+            task.effort = updateTaskDto.effort;
+        }
+
+        if (updateTaskDto.sprintId !== undefined && updateTaskDto.sprintId !== task.sprintId) {
+            task.sprintId = updateTaskDto.sprintId;
+        }
+
+        if (updateTaskDto.dependsOnId !== undefined && updateTaskDto.dependsOnId !== task.dependsOnId) {
+            task.dependsOnId = updateTaskDto.dependsOnId;
+        }
 
         return this.taskRepository.save(task);
     }

@@ -10,6 +10,7 @@ import {
 import { User } from './user.entity';
 import { UserGroup } from './user-group.entity';
 import { Task } from './task.entity';
+import { Sprint } from './sprint.entity';
 
 @Entity('groups')
 export class Group {
@@ -37,4 +38,7 @@ export class Group {
 
     @OneToMany(() => Task, (task) => task.group)
     tasks: Task[];
+
+    @OneToMany(() => Sprint, (sprint) => sprint.group)
+    sprints: Sprint[];
 }

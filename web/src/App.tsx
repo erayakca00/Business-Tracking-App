@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import GroupDetails from './pages/GroupDetails';
+import SprintPlanning from './pages/SprintPlanning';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -25,6 +26,14 @@ function App() {
                 element={
                     <ProtectedRoute>
                         <GroupDetails />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/groups/:groupId/sprints"
+                element={
+                    <ProtectedRoute>
+                        <SprintPlanning />
                     </ProtectedRoute>
                 }
             />

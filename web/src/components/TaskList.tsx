@@ -14,6 +14,8 @@ interface Task {
     updatedAt?: string;
     createdAt?: string;
     projectTag?: string;
+    dependsOnId?: string | null;
+    dependsOn?: { title: string };
 }
 
 interface Member {
@@ -131,6 +133,13 @@ const TaskList: React.FC<TaskListProps> = ({
                                 <td className="px-6 py-4">
                                     <div className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</div>
                                     {task.description && <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{task.description}</div>}
+                                    {task.dependsOn && (
+                                        <div className="mt-1">
+                                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                                🚧 Blocked by: {task.dependsOn.title}
+                                            </span>
+                                        </div>
+                                    )}
                                 </td>
                                 <td className="px-4 py-4 whitespace-nowrap">
                                     <div className="flex gap-1 flex-wrap">

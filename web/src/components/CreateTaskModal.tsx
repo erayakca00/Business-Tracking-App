@@ -13,6 +13,7 @@ interface CreateTaskModalProps {
     isAdmin: boolean;
     currentUserId?: string;
     existingTags?: string[];
+    allTasks?: any[];
 }
 
 const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
@@ -25,16 +26,19 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     isAdmin,
     currentUserId,
     existingTags = [],
+    allTasks = [],
 }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [status, setStatus] = useState('todo');
     const [priority, setPriority] = useState('medium');
+    const [effort, setEffort] = useState<number | null>(null);
     const [assignedTo, setAssignedTo] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [tagPrefix, setTagPrefix] = useState('');  // 3 uppercase letters e.g. PRO
     const [tagNumber, setTagNumber] = useState('');  // numeric part e.g. 1
     const [showTagList, setShowTagList] = useState(false);
+    const [dependsOnId, setDependsOnId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
     // Derived combined tag value, e.g. "PRO-1"
@@ -67,9 +71,11 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             setDescription(taskToEdit.description || '');
             setStatus(taskToEdit.status);
             setPriority(taskToEdit.priority);
+            setEffort(taskToEdit.effort || null);
             setAssignedTo(taskToEdit.assignedToId || '');
             // Format date for input
-            setDueDate(taskToEdit.dueDate ? new Date(taskToEdit.dueDate).toISOString().slice(0, 16) : '');
+            setDueDate(taskToEdit.dueDate ? new Date(taskToEdit.dueDate).toISOString().substring(0, 10) : '');
+            setDependsOnId(taskToEdit.dependsOnId || null);
             if (taskToEdit.projectTag) {
                 const parts = taskToEdit.projectTag.split('-');
                 setTagPrefix(parts[0] || '');
@@ -80,8 +86,10 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             setDescription('');
             setStatus('todo');
             setPriority('medium');
+            setEffort(null);
             setAssignedTo('');
             setDueDate('');
+            setDependsOnId(null);
             resetTag();
         }
     }, [taskToEdit, isOpen]);
@@ -102,6 +110,8 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     assignedToId: assignedTo || null,
                     dueDate: dueDate || undefined,
                     projectTag: projectTag || undefined,
+                    effort: effort || undefined,
+                    dependsOnId: dependsOnId || null,
                 };
                 await api.patch(`/tasks/${taskToEdit.id}`, updateData);
             } else {
@@ -114,6 +124,8 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     assignedToId: assignedTo || undefined,
                     dueDate: dueDate || undefined,
                     projectTag: projectTag || undefined,
+                    effort: effort || undefined,
+                    dependsOnId: dependsOnId || undefined,
                 };
                 await api.post('/tasks', createData);
             }
@@ -192,6 +204,20 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </div>
 
                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Blocked By</label>
+                        <select
+                            value={dependsOnId || ''}
+                            onChange={(e) => setDependsOnId(e.target.value || null)}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        >
+                            <option value="">None</option>
+                            {allTasks.filter(t => !taskToEdit || t.id !== taskToEdit.id).map(t => (
+                                <option key={t.id} value={t.id}>{t.title}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deadline</label>
                         <input
                             type="datetime-local"
@@ -202,6 +228,28 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         />
                     </div>
 
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Effort</label>
+                        <div className="flex gap-2">
+                            {([1, 2, 3, 4, 5] as const).map((val) => (
+                                <button
+                                    key={val}
+                                    type="button"
+                                    onClick={() => setEffort(effort === val ? null : val)}
+                                    disabled={!canEdit}
+                                    title={['', 'Trivial', 'Easy', 'Medium', 'Hard', 'Very Hard'][val]}
+                                    className={`flex-1 py-1.5 rounded-md text-sm font-bold border transition-colors disabled:opacity-50 ${
+                                        effort === val
+                                            ? val <= 2 ? 'bg-green-500 border-green-500 text-white' : val === 3 ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-red-500 border-red-500 text-white'
+                                            : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                    }`}
+                                >
+                                    {val}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">1 = Trivial &nbsp;·&nbsp; 5 = Very Hard</p>
+                    </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Tag</label>
 

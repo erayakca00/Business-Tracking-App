@@ -13,6 +13,8 @@ interface Task {
     updatedAt?: string;
     createdAt?: string;
     projectTag?: string;
+    dependsOnId?: string | null;
+    dependsOn?: { title: string };
 }
 
 interface TaskBoardProps {
@@ -23,6 +25,7 @@ interface TaskBoardProps {
     onViewDetail?: (task: Task) => void;
     isAdmin: boolean;
     currentUserId?: string;
+    onStatusChange?: (taskId: string, newStatus: Task['status']) => void;
 }
 
 const COLUMNS = [
@@ -39,7 +42,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     onDelete,
     onViewDetail,
     isAdmin,
-    currentUserId
+    currentUserId,
+    onStatusChange
 }) => {
     const getTasksByStatus = (status: string) => {
         return tasks.filter((task) => task.status === status);
@@ -64,10 +68,22 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                         </span>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                    <div 
+                        className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            const taskId = e.dataTransfer.getData('taskId');
+                            if (taskId && onStatusChange) {
+                                onStatusChange(taskId, column.id as Task['status']);
+                            }
+                        }}
+                    >
                         {postsByStatus[column.id].map(task => (
                             <div
                                 key={task.id}
+                                draggable={true}
+                                onDragStart={(e) => e.dataTransfer.setData('taskId', task.id)}
                                 className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-200 cursor-pointer group relative"
                                 onClick={() => onViewDetail ? onViewDetail(task) : (canEditTask(task) && onEdit(task))}
                             >
@@ -104,6 +120,14 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                     <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 mb-3">
                                         {task.description}
                                     </p>
+                                )}
+
+                                {task.dependsOn && (
+                                    <div className="mb-1.5 flex items-start gap-1">
+                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                            🚧 Blocked by: {task.dependsOn.title}
+                                        </span>
+                                    </div>
                                 )}
 
                                 <div className="mb-1">

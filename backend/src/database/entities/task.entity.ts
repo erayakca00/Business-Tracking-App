@@ -8,6 +8,7 @@ import {
     JoinColumn,
 } from 'typeorm';
 import { User } from './user.entity';
+import { Sprint } from './sprint.entity';
 import { Group } from './group.entity';
 
 export enum TaskStatus {
@@ -64,6 +65,9 @@ export class Task {
     @Column({ name: 'estimated_hours', type: 'integer', nullable: true })
     estimatedHours: number;
 
+    @Column({ type: 'integer', nullable: true })
+    effort: number; // 1 (trivial) to 5 (very complex)
+
     @Column({ type: 'jsonb', nullable: true, name: 'required_skills' })
     requiredSkills: string[];
 
@@ -82,9 +86,16 @@ export class Task {
     @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
     completedAt: Date;
 
+    @Column({ name: 'sprint_id', nullable: true })
+    sprintId: string | null;
+
     @ManyToOne(() => Group, (group) => group.tasks, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'group_id' })
     group: Group;
+
+    @ManyToOne(() => Sprint, (sprint) => sprint.tasks, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'sprint_id' })
+    sprint: Sprint;
 
     @ManyToOne(() => User, (user) => user.assignedTasks, { nullable: true })
     @JoinColumn({ name: 'assigned_to' })
@@ -93,4 +104,11 @@ export class Task {
     @ManyToOne(() => User, (user) => user.createdTasks)
     @JoinColumn({ name: 'created_by' })
     createdBy: User;
+
+    @Column({ name: 'depends_on_id', nullable: true })
+    dependsOnId: string | null;
+
+    @ManyToOne(() => Task, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'depends_on_id' })
+    dependsOn: Task;
 }

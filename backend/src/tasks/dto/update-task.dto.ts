@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, IsEnum, ValidateIf, Matches } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsEnum, ValidateIf, Matches, IsInt, Min, Max } from 'class-validator';
 import { TaskStatus, TaskPriority } from '../../database/entities/task.entity';
 
 export class UpdateTaskDto {
@@ -30,4 +30,17 @@ export class UpdateTaskDto {
     @IsOptional()
     @Matches(/^[A-Z]{3}-\d+$/, { message: 'Tag must be in format ABC-1 (3 uppercase letters, dash, number)' })
     projectTag?: string;
+
+    @IsInt()
+    @Min(1)
+    @Max(5)
+    @IsOptional()
+    effort?: number;
+
+    @IsOptional()
+    sprintId?: string | null;
+
+    @IsString()
+    @IsOptional()
+    dependsOnId?: string | null;
 }

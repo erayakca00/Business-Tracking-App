@@ -159,7 +159,7 @@ export class GroupsService {
 
         const groupWithTasks = await this.groupRepository.findOne({
             where: { id: groupId },
-            relations: ['tasks', 'tasks.assignedTo', 'tasks.createdBy'],
+            relations: ['tasks', 'tasks.assignedTo', 'tasks.createdBy', 'tasks.dependsOn'],
             order: {
                 tasks: {
                     createdAt: 'DESC',

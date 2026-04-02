@@ -11,6 +11,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { CommentsModule } from './comments/comments.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { SprintsModule } from './sprints/sprints.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
     CommentsModule,
     NotificationsModule,
     AttachmentsModule,
+    SprintsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, LayoutGrid, List as ListIcon, ArrowLeft, Settings } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, ArrowLeft, Settings, Zap } from 'lucide-react';
 import api from '../services/api';
 import CreateTaskModal from '../components/CreateTaskModal';
 import GroupSettingsModal from '../components/GroupSettingsModal';
 import TaskDetailPanel from '../components/TaskDetailPanel';
+import SprintBanner from '../components/SprintBanner';
 import { useAuth } from '../context/AuthContext';
 import TaskBoard from '../components/TaskBoard';
 import TaskList from '../components/TaskList';
@@ -18,9 +19,11 @@ const GroupDetails = () => {
 
     const [group, setGroup] = useState<any>(null);
     const [tasks, setTasks] = useState<any[]>([]);
+    const [sprints, setSprints] = useState<any[]>([]);
     const [members, setMembers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+    const [sprintFilter, setSprintFilter] = useState<'active' | 'backlog' | 'all'>('active');
 
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -33,15 +36,23 @@ const GroupDetails = () => {
 
     const fetchData = async () => {
         try {
-            const [groupRes, tasksRes, membersRes] = await Promise.all([
+            const [groupRes, tasksRes, membersRes, sprintsRes] = await Promise.all([
                 api.get(`/groups/${groupId}`),
                 api.get(`/groups/${groupId}/tasks`),
                 api.get(`/groups/${groupId}/users`),
+                api.get(`/groups/${groupId}/sprints`),
             ]);
 
             setGroup(groupRes.data);
             setTasks(tasksRes.data);
             setMembers(membersRes.data);
+            setSprints(sprintsRes.data);
+
+            // Default to 'all' if no active sprint
+            const hasActive = sprintsRes.data.some((s: any) => s.status === 'active');
+            if (!hasActive && sprintFilter === 'active') {
+                setSprintFilter('all');
+            }
         } catch (error) {
             console.error('Failed to fetch group details', error);
         } finally {
@@ -114,8 +125,20 @@ const GroupDetails = () => {
     const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
     const statusOrder: Record<string, number> = { todo: 0, in_progress: 1, review: 2, done: 3, blocked: 4 };
 
+    const activeSprint = useMemo(() => sprints.find(s => s.status === 'active'), [sprints]);
+
     const filteredTasks = useMemo(() => {
-        let base = tagFilter ? tasks.filter((t: any) => t.projectTag === tagFilter) : tasks;
+        let base = tasks;
+
+        if (sprintFilter === 'active' && activeSprint) {
+            base = base.filter((t: any) => t.sprintId === activeSprint.id);
+        } else if (sprintFilter === 'backlog') {
+            base = base.filter((t: any) => t.sprintId === null);
+        }
+
+        if (tagFilter) {
+            base = base.filter((t: any) => t.projectTag === tagFilter);
+        }
 
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
@@ -138,7 +161,7 @@ const GroupDetails = () => {
             }
             return sortDir === 'asc' ? cmp : -cmp;
         });
-    }, [tasks, tagFilter, searchQuery, sortBy, sortDir]);
+    }, [tasks, tagFilter, searchQuery, sortBy, sortDir, sprintFilter, activeSprint]);
 
     const handleSortChange = (column: string) => {
         if (sortBy === column as any) {
@@ -201,6 +224,9 @@ const GroupDetails = () => {
                 </div>
             </header>
 
+            {/* Sprint Banner */}
+            <SprintBanner groupId={groupId!} />
+
             {/* Main Content */}
             <div className="flex-1 overflow-hidden relative">
                 <main className="h-full w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
@@ -224,7 +250,15 @@ const GroupDetails = () => {
                         </div>
 
                         <div className="flex items-center space-x-3">
-
+                            {isAdmin && (
+                                <Link
+                                    to={`/groups/${groupId}/sprints`}
+                                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors"
+                                >
+                                    <Zap size={15} />
+                                    Sprints
+                                </Link>
+                            )}
                             <button
                                 onClick={handleCreateTask}
                                 className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-all hover:shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -252,7 +286,41 @@ const GroupDetails = () => {
                             />
                         </div>
 
-                        {/* Filters */}
+                        {/* Sprint Filters */}
+                        <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                            <button
+                                onClick={() => setSprintFilter('active')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                    sprintFilter === 'active' 
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                }`}
+                            >
+                                Active Sprint
+                            </button>
+                            <button
+                                onClick={() => setSprintFilter('backlog')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                    sprintFilter === 'backlog' 
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                }`}
+                            >
+                                Backlog
+                            </button>
+                            <button
+                                onClick={() => setSprintFilter('all')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                    sprintFilter === 'all' 
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                }`}
+                            >
+                                All Tasks
+                            </button>
+                        </div>
+
+                        {/* Tag Filters */}
                         {(uniqueTags.length > 0) && (
                             <div className="flex items-center gap-2 flex-wrap">
                                 <button
@@ -319,6 +387,16 @@ const GroupDetails = () => {
                                             onViewDetail={setSelectedTask}
                                             isAdmin={isAdmin}
                                             currentUserId={user?.id}
+                                            onStatusChange={async (taskId, status) => {
+                                                try {
+                                                    // Optimistic UI update could be done here, but fetchData is simple
+                                                    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+                                                    await api.patch(`/tasks/${taskId}`, { status });
+                                                    fetchData();
+                                                } catch (error) {
+                                                    console.error('Failed to update status', error);
+                                                }
+                                            }}
                                         />
                                     </div>
                                 ) : (
@@ -369,6 +447,7 @@ const GroupDetails = () => {
                 isAdmin={isAdmin}
                 currentUserId={user?.id}
                 existingTags={uniqueTags as string[]}
+                allTasks={tasks}
             />
 
             <GroupSettingsModal
