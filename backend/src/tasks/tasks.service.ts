@@ -35,6 +35,20 @@ export class TasksService {
         });
     }
 
+    /**
+     * Creates a new task within a specified group.
+     * Enforces the following business rules:
+     * 1. The user must be a member of the group.
+     * 2. If assigning the task to someone, the user must be a group ADMIN.
+     * 3. The assignee must belong to the group.
+     * 
+     * Automatically logs the 'created' event to the task activity audit log.
+     * 
+     * @param createTaskDto The payload containing task metadata and target group.
+     * @param user The authenticated user creating the task.
+     * @returns The newly persisted Task entity.
+     * @throws ForbiddenException if user lacks required permissions.
+     */
     async create(createTaskDto: CreateTaskDto, user: User): Promise<Task> {
         const group = await this.groupRepository.findOne({ where: { id: createTaskDto.groupId } });
         if (!group) throw new NotFoundException('Group not found');
@@ -74,6 +88,15 @@ export class TasksService {
         return saved;
     }
 
+    /**
+     * Retrieves all tasks accessible to the current user globally.
+     * Accessible tasks are defined as:
+     * - Tasks that belong to groups the user is a member of.
+     * - Tasks explicitly assigned to the user.
+     * 
+     * @param user The authenticated user requesting their dashboard summary.
+     * @returns An array of Tasks with preloaded Group, Assignee, and Creator relations.
+     */
     async findAll(user: User): Promise<Task[]> {
         // Find all tasks where user is assignee OR user is member of the group
         // 1. Get all group IDs where user is member
@@ -97,6 +120,15 @@ export class TasksService {
             .getMany();
     }
 
+    /**
+     * Fetches a single task by its ID and ensures the user has permission to view it.
+     * 
+     * @param id The UUID of the requested task.
+     * @param user The authenticated user.
+     * @returns The Task entity.
+     * @throws NotFoundException if the task does not exist.
+     * @throws ForbiddenException if the user is not in the group that owns the task.
+     */
     async findOne(id: string, user: User): Promise<Task> {
         const task = await this.taskRepository.findOne({
             where: { id },
@@ -119,6 +151,20 @@ export class TasksService {
         return task;
     }
 
+    /**
+     * Updates specific fields of an existing task.
+     * Business rules applied:
+     * - Only Group Admins, the Task Assignee, or the Task Creator can edit the task.
+     * - Only Group Admins or the Task Creator can reassign the task.
+     * - The new assignee must belong to the task's parent group.
+     * - If the status transitions to 'DONE', the `completedAt` timestamp is set.
+     * 
+     * Automatically logs atomic changes (status change, date change, etc.) into the Task Activity log.
+     * 
+     * @param id Task UUID
+     * @param updateTaskDto Partial payload of allowed updatable fields.
+     * @param user The authenticated user attempting the edit.
+     */
     async update(id: string, updateTaskDto: UpdateTaskDto, user: User): Promise<Task> {
         const task = await this.findOne(id, user); // Checks access
 
@@ -201,6 +247,14 @@ export class TasksService {
         return this.taskRepository.save(task);
     }
 
+    /**
+     * Deletes a task from the database.
+     * Ensures only the original creator of the task can delete it.
+     * Cascading deletes will handle related entities (like activity logs).
+     * 
+     * @param id Task UUID to delete.
+     * @param user The authenticated user intending to delete the task.
+     */
     async remove(id: string, user: User): Promise<void> {
         const task = await this.findOne(id, user);
 

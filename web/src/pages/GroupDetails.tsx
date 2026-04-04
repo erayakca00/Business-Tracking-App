@@ -11,6 +11,16 @@ import TaskBoard from '../components/TaskBoard';
 import TaskList from '../components/TaskList';
 import NotificationBell from '../components/NotificationBell';
 
+/**
+ * GroupDetails Component
+ * 
+ * The primary dashboard view for an individual project/group.
+ * Orchestrates fetching all related contexts including Tasks, Sprints, and Members exactly once on mount.
+ * 
+ * - Handles filtering logic (by Sprint, Tags, Search).
+ * - Manages view toggle between 'TaskBoard' (Kanban) and 'TaskList' (Data Grid).
+ * - Centralizes CRUD operations for tasks safely, passing them down as props to the presentational components.
+ */
 const GroupDetails = () => {
     const { groupId } = useParams<{ groupId: string }>();
     const navigate = useNavigate();

@@ -72,6 +72,14 @@ export class SprintsService {
         return this.sprintRepository.save(sprint);
     }
 
+    /**
+     * Completely removes a sprint from the database.
+     * To prevent orphaned data, any tasks assigned to this sprint will be 
+     * moved back to the product Backlog (`sprintId` set to null).
+     * 
+     * @param sprintId The UUID of the sprint to delete.
+     * @param user The user initiating deletion (must be admin).
+     */
     async remove(sprintId: string, user: User): Promise<void> {
         const sprint = await this.findOne(sprintId);
         await this.assertAdmin(sprint.groupId, user.id);
@@ -80,6 +88,14 @@ export class SprintsService {
         await this.sprintRepository.remove(sprint);
     }
 
+    /**
+     * Transitions a planned sprint to an ACTIVE state.
+     * Business rules:
+     * 1. A group can only have ONE active sprint at a time.
+     * 2. When a sprint starts, any task inside it that does NOT currently 
+     *    have a due date will automatically inherit the sprint's strict end date.
+     *    Tasks with an existing due date (like technical debt from past sprints) remain untouched to preserve history.
+     */
     async startSprint(sprintId: string, user: User): Promise<Sprint> {
         const sprint = await this.findOne(sprintId);
         await this.assertAdmin(sprint.groupId, user.id);
@@ -119,6 +135,13 @@ export class SprintsService {
         return savedSprint;
     }
 
+    /**
+     * Marks the active sprint as COMPLETED.
+     * Implementation details:
+     * - Finds all tasks within the sprint that are NOT marked as 'done'.
+     * - Automatically moves these unfinished tasks to the Backlog (sprintId = null)
+     *   so they can be triaged into the next sprint (Technical Debt handling).
+     */
     async completeSprint(sprintId: string, user: User): Promise<Sprint> {
         const sprint = await this.sprintRepository.findOne({
             where: { id: sprintId },

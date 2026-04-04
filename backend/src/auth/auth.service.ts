@@ -19,6 +19,15 @@ export class AuthService {
         private jwtService: JwtService,
     ) { }
 
+    /**
+     * Registers a new user in the system.
+     * Ensures email uniqueness, hashes the password securely,
+     * and auto-logs the user in by generating a fast JWT token.
+     * 
+     * @param registerDto Contains user email, password, name, and optional skills.
+     * @returns AuthResponseDto containing the JWT and user profile.
+     * @throws ConflictException if the email is already taken.
+     */
     async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
         const { email, password, name, skills } = registerDto;
 
@@ -59,6 +68,14 @@ export class AuthService {
         };
     }
 
+    /**
+     * Authenticates an existing user and returns a JWT access token.
+     * Verifies the provided plaintext password against the stored bcrypt hash.
+     * 
+     * @param loginDto Contains user email and plaintext password.
+     * @returns AuthResponseDto containing the JWT and user profile.
+     * @throws UnauthorizedException on incorrect email or password.
+     */
     async login(loginDto: LoginDto): Promise<AuthResponseDto> {
         const { email, password } = loginDto;
 
@@ -93,6 +110,11 @@ export class AuthService {
         };
     }
 
+    /**
+     * Helper method used by Passport JS local strategy (if applicable)
+     * to validate user credentials asynchronously. Returns the user object
+     * without the password field if successful.
+     */
     async validateUser(email: string, pass: string): Promise<any> {
         const user = await this.userRepository.findOne({ where: { email } });
         if (!user) {
