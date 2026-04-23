@@ -14,6 +14,8 @@ interface CreateTaskModalProps {
     currentUserId?: string;
     existingTags?: string[];
     allTasks?: any[];
+    sprints?: any[];
+    activeSprint?: any;
 }
 
 const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
@@ -27,6 +29,8 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     currentUserId,
     existingTags = [],
     allTasks = [],
+    sprints = [],
+    activeSprint,
 }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -39,10 +43,19 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     const [tagNumber, setTagNumber] = useState('');  // numeric part e.g. 1
     const [showTagList, setShowTagList] = useState(false);
     const [dependsOnId, setDependsOnId] = useState<string | null>(null);
+    const [sprintId, setSprintId] = useState<string | ''>('');
     const [isLoading, setIsLoading] = useState(false);
 
     // Derived combined tag value, e.g. "PRO-1"
     const projectTag = tagPrefix.length === 3 && tagNumber ? `${tagPrefix}-${tagNumber}` : undefined;
+
+    // Tags scoped to the selected sprint
+    const sprintFilteredTags = Array.from(new Set(
+        allTasks
+            .filter(t => sprintId ? t.sprintId === sprintId : !t.sprintId)
+            .map(t => t.projectTag)
+            .filter(Boolean)
+    )) as string[];
 
     const handlePrefixChange = (val: string) => {
         const upper = val.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
@@ -76,6 +89,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             // Format date for input
             setDueDate(taskToEdit.dueDate ? new Date(taskToEdit.dueDate).toISOString().substring(0, 10) : '');
             setDependsOnId(taskToEdit.dependsOnId || null);
+            setSprintId(taskToEdit.sprintId || '');
             if (taskToEdit.projectTag) {
                 const parts = taskToEdit.projectTag.split('-');
                 setTagPrefix(parts[0] || '');
@@ -90,6 +104,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             setAssignedTo('');
             setDueDate('');
             setDependsOnId(null);
+            setSprintId(activeSprint?.id || '');
             resetTag();
         }
     }, [taskToEdit, isOpen]);
@@ -126,6 +141,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     projectTag: projectTag || undefined,
                     effort: effort || undefined,
                     dependsOnId: dependsOnId || undefined,
+                    sprintId: sprintId || undefined,
                 };
                 await api.post('/tasks', createData);
             }
@@ -203,6 +219,27 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         </div>
                     </div>
 
+                    {/* Sprint Selector */}
+                    {sprints.length > 0 && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sprint</label>
+                            <select
+                                value={sprintId}
+                                onChange={(e) => { setSprintId(e.target.value); setDependsOnId(null); }}
+                                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                                disabled={!canEdit}
+                            >
+                                <option value="">Backlog (no sprint)</option>
+                                {sprints.map((s: any) => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.name} {s.status === 'active' ? '⚡' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1">Assign this task directly to a sprint</p>
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Blocked By</label>
                         <select
@@ -211,10 +248,15 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         >
                             <option value="">None</option>
-                            {allTasks.filter(t => !taskToEdit || t.id !== taskToEdit.id).map(t => (
-                                <option key={t.id} value={t.id}>{t.title}</option>
-                            ))}
+                            {allTasks
+                                .filter(t => (!taskToEdit || t.id !== taskToEdit.id) && (sprintId ? t.sprintId === sprintId : !t.sprintId))
+                                .map(t => (
+                                    <option key={t.id} value={t.id}>{t.title}</option>
+                                ))}
                         </select>
+                        <p className="text-xs text-gray-400 mt-1">
+                            {sprintId ? 'Showing tasks from the selected sprint' : 'Showing backlog tasks'}
+                        </p>
                     </div>
 
                     <div>
@@ -254,7 +296,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Tag</label>
 
                         {/* Existing tags toggle */}
-                        {existingTags.length > 0 && (
+                        {sprintFilteredTags.length > 0 && (
                             <div>
                                 <button
                                     type="button"
@@ -262,11 +304,11 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                                     className="mt-1 mb-1 flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline"
                                 >
                                     <span>{showTagList ? '▲' : '▼'}</span>
-                                    {showTagList ? 'Hide' : 'Show'} existing tags ({existingTags.length})
+                                    {showTagList ? 'Hide' : 'Show'} existing tags ({sprintFilteredTags.length})
                                 </button>
                                 {showTagList && (
                                     <div className="mb-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1">
-                                        {existingTags.map(tag => (
+                                        {sprintFilteredTags.map(tag => (
                                             <button
                                                 key={tag}
                                                 type="button"

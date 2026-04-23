@@ -130,15 +130,15 @@ const GroupDetails = () => {
     const currentUserRole = members.find((m: any) => m.userId === user?.id)?.role;
     const isAdmin = currentUserRole === 'admin' || isOwner;
 
-    const uniqueTags = Array.from(new Set(tasks.map((t: any) => t.projectTag).filter(Boolean)));
-
     const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
     const statusOrder: Record<string, number> = { todo: 0, in_progress: 1, review: 2, done: 3, blocked: 4 };
 
     const activeSprint = useMemo(() => sprints.find(s => s.status === 'active'), [sprints]);
+    const completedSprintIds = useMemo(() => new Set(sprints.filter(s => s.status === 'completed').map(s => s.id)), [sprints]);
 
     const filteredTasks = useMemo(() => {
-        let base = tasks;
+        // Always exclude tasks from completed sprints — they belong to past work
+        let base = tasks.filter((t: any) => !t.sprintId || !completedSprintIds.has(t.sprintId));
 
         if (sprintFilter === 'active' && activeSprint) {
             base = base.filter((t: any) => t.sprintId === activeSprint.id);
@@ -171,7 +171,13 @@ const GroupDetails = () => {
             }
             return sortDir === 'asc' ? cmp : -cmp;
         });
-    }, [tasks, tagFilter, searchQuery, sortBy, sortDir, sprintFilter, activeSprint]);
+    }, [tasks, tagFilter, searchQuery, sortBy, sortDir, sprintFilter, activeSprint, completedSprintIds]);
+
+    // Tags scoped to the currently visible tasks (sprint-aware)
+    const uniqueTags = useMemo(() =>
+        Array.from(new Set(filteredTasks.map((t: any) => t.projectTag).filter(Boolean))),
+        [filteredTasks]
+    );
 
     const handleSortChange = (column: string) => {
         if (sortBy === column as any) {
@@ -269,13 +275,15 @@ const GroupDetails = () => {
                                     Sprints
                                 </Link>
                             )}
-                            <button
-                                onClick={handleCreateTask}
-                                className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-all hover:shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                            >
-                                <Plus size={18} className="mr-2" />
-                                New Task
-                            </button>
+                            {isAdmin && (
+                                <button
+                                    onClick={handleCreateTask}
+                                    className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-all hover:shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                >
+                                    <Plus size={18} className="mr-2" />
+                                    New Task
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -375,15 +383,19 @@ const GroupDetails = () => {
                                 </div>
                                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No tasks yet</h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
-                                    Get started by creating your first task for this group.
+                                    {isAdmin
+                                        ? 'Get started by creating your first task for this group.'
+                                        : 'No tasks have been created in this group yet. Only admins can create tasks.'}
                                 </p>
-                                <button
-                                    onClick={handleCreateTask}
-                                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-                                >
-                                    <Plus size={18} className="mr-2" />
-                                    Create Task
-                                </button>
+                                {isAdmin && (
+                                    <button
+                                        onClick={handleCreateTask}
+                                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                                    >
+                                        <Plus size={18} className="mr-2" />
+                                        Create Task
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             <div className="h-full overflow-hidden">
@@ -419,7 +431,7 @@ const GroupDetails = () => {
                                             onViewDetail={setSelectedTask}
                                             onBulkStatusChange={async (taskIds, status) => {
                                                 try {
-                                                    await Promise.all(taskIds.map(id => api.patch(`/tasks/${id}`, { status })));
+                                                    await api.patch(`/tasks/bulk/status`, { taskIds, status });
                                                     fetchData();
                                                 } catch (error) {
                                                     console.error('Failed to bulk update status', error);
@@ -427,7 +439,7 @@ const GroupDetails = () => {
                                             }}
                                             onBulkDelete={async (taskIds) => {
                                                 try {
-                                                    await Promise.all(taskIds.map(id => api.delete(`/tasks/${id}`)));
+                                                    await api.post(`/tasks/bulk/delete`, { taskIds });
                                                     fetchData();
                                                 } catch (error) {
                                                     console.error('Failed to bulk delete tasks', error);
@@ -457,7 +469,9 @@ const GroupDetails = () => {
                 isAdmin={isAdmin}
                 currentUserId={user?.id}
                 existingTags={uniqueTags as string[]}
-                allTasks={tasks}
+                allTasks={tasks.filter((t: any) => !t.sprintId || !completedSprintIds.has(t.sprintId))}
+                sprints={sprints.filter(s => s.status !== 'completed')}
+                activeSprint={activeSprint}
             />
 
             <GroupSettingsModal

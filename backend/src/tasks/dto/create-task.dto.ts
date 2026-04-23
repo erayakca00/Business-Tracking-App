@@ -39,4 +39,8 @@ export class CreateTaskDto {
     @IsString()
     @IsOptional()
     dependsOnId?: string | null;
+
+    @IsUUID()
+    @IsOptional()
+    sprintId?: string;
 }

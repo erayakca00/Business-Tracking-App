@@ -41,6 +41,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }: CreateGroupModalP
                         type="text"
                         id="name"
                         required
+                        autoComplete="off"
                         className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                         value={name}
                         onChange={(e) => setName(e.target.value)}

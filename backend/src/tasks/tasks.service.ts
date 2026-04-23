@@ -8,6 +8,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { User } from '../database/entities/user.entity';
 import { TaskActivity, ActivityType } from '../database/entities/task-activity.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TasksService {
@@ -20,6 +21,7 @@ export class TasksService {
         private readonly groupRepository: Repository<Group>,
         @InjectRepository(TaskActivity)
         private readonly activityRepository: Repository<TaskActivity>,
+        private readonly notificationsService: NotificationsService,
     ) { }
 
     private async logActivity(taskId: string, userId: string, type: ActivityType, data?: { from?: string; to?: string }) {
@@ -59,6 +61,11 @@ export class TasksService {
         });
         if (!userGroup) throw new ForbiddenException('You are not a member of this group');
 
+        // Only admins can create tasks
+        if (userGroup.role !== UserRole.ADMIN) {
+            throw new ForbiddenException('Only group admins can create tasks');
+        }
+
         // Check permission if assigning
         if (createTaskDto.assignedToId) {
             if (userGroup.role !== UserRole.ADMIN) {
@@ -85,6 +92,18 @@ export class TasksService {
 
         const saved = await this.taskRepository.save(task);
         await this.logActivity(saved.id, user.id, 'created');
+
+        // Notify the assignee that they have a new task
+        if (createTaskDto.assignedToId) {
+            await this.notificationsService.createNotification({
+                userId: createTaskDto.assignedToId,
+                actorId: user.id,
+                type: 'task_assigned',
+                message: `You have been assigned a new task: "${saved.title}"`,
+                taskId: saved.id,
+            });
+        }
+
         return saved;
     }
 
@@ -199,6 +218,15 @@ export class TasksService {
                     throw new BadRequestException('Assignee is not a member of this group');
                 }
                 task.assignedTo = { id: updateTaskDto.assignedToId } as User;
+
+                // Notify the new assignee
+                await this.notificationsService.createNotification({
+                    userId: updateTaskDto.assignedToId,
+                    actorId: user.id,
+                    type: 'task_assigned',
+                    message: `You have been assigned to task: "${task.title}"`,
+                    taskId: task.id,
+                });
             }
         }
 
@@ -258,39 +286,63 @@ export class TasksService {
     async remove(id: string, user: User): Promise<void> {
         const task = await this.findOne(id, user);
 
-        // Only creator or admin can delete? 
-        // Let's check permissions.
-        // If user is creator -> OK.
-        // If user is group admin -> OK.
-
-        // Check if user is creator
-        if (task.createdBy.id === user.id) {
-            await this.taskRepository.remove(task);
-            return;
-        }
+        const isCreator = task.createdBy && task.createdBy.id === user.id;
 
         // Check if user is admin of the group
         const userGroup = await this.userGroupRepository.findOne({
             where: { userId: user.id, groupId: task.group.id },
         });
+        const isAdmin = userGroup && userGroup.role === UserRole.ADMIN;
 
-        // We need to check role. userGroup definitely exists because findOne checked it.
-        // But we need to make sure role is fetched/checked
-        // Wait, UserGroup entity import might create circular dep if I import enum? No entity is fine.
-        // I need UserRole enum.
-
-        // Let's assume UserRole.ADMIN string check or import enum.
-        // I will import Enum.
-
-        // Note: I am not importing UserRole here yet in code block, I need to add imports.
-
-        // Temporary logic: Allow deletion by creator only for now to keep simple, or assume admin check logic.
-        // Let's allow creator only for this iteration to be safe.
-
-        if (task.createdBy.id !== user.id) {
-            throw new ForbiddenException('Only the task creator can delete the task');
+        if (!isCreator && !isAdmin) {
+            throw new ForbiddenException('Only group admins can delete tasks');
         }
 
         await this.taskRepository.remove(task);
+    }
+
+    async bulkUpdateStatus(taskIds: string[], status: TaskStatus, user: User): Promise<void> {
+        // Iterate and update individually to ensure permissions and activity logging are applied
+        for (const id of taskIds) {
+            try {
+                // If it throws (e.g. 404 or 403), we can choose to skip or fail the whole thing.
+                // It's better to skip and try updating the rest than to fail all.
+                const task = await this.findOne(id, user);
+                const userGroup = await this.userGroupRepository.findOne({
+                    where: { userId: user.id, groupId: task.group.id },
+                });
+                const isAdmin = userGroup && userGroup.role === UserRole.ADMIN;
+                const isAssignee = task.assignedTo && task.assignedTo.id === user.id;
+                const isCreator = task.createdBy && task.createdBy.id === user.id;
+
+                if (!isAdmin && !isAssignee && !isCreator) {
+                    continue; // Skip if no permission
+                }
+
+                if (task.status !== status) {
+                    await this.logActivity(task.id, user.id, 'status_changed', { from: task.status, to: status });
+                    task.status = status;
+                    if (status === TaskStatus.DONE) {
+                        task.completedAt = new Date();
+                    } else {
+                        task.completedAt = null as any;
+                    }
+                    await this.taskRepository.save(task);
+                }
+            } catch (e) {
+                // Skip not found tasks or tasks without access
+                console.error(`Failed to update task ${id}:`, e);
+            }
+        }
+    }
+
+    async bulkDelete(taskIds: string[], user: User): Promise<void> {
+        for (const id of taskIds) {
+            try {
+                await this.remove(id, user);
+            } catch (e) {
+                console.error(`Failed to delete task ${id}:`, e);
+            }
+        }
     }
 }
