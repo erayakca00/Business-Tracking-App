@@ -53,6 +53,8 @@ services:
         generateValue: true
       - key: GEMINI_API_KEY
         sync: false # User will provide their Gemini API key in Render Dashboard
+      - key: RESEND_API_KEY
+        sync: false # User will provide their Resend API key in Render Dashboard
 
       # CORS Origin restricted to the Web Frontend
       - key: CORS_ORIGIN
