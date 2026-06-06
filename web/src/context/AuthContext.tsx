@@ -28,9 +28,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const storedToken = localStorage.getItem('token');
         const storedUser = localStorage.getItem('user');
 
-        if (storedToken && storedUser) {
-            setToken(storedToken);
-            setUser(JSON.parse(storedUser));
+        if (storedToken && storedUser && storedUser !== 'undefined') {
+            try {
+                setToken(storedToken);
+                setUser(JSON.parse(storedUser));
+            } catch (err) {
+                console.error('Failed to parse stored user:', err);
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+            }
         }
         setIsLoading(false);
     }, []);
