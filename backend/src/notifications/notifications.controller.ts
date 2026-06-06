@@ -13,7 +13,7 @@ import { NotificationsService } from './notifications.service';
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
-  constructor(private notificationsService: NotificationsService) {}
+  constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
   async getUserNotifications(
@@ -21,8 +21,8 @@ export class NotificationsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const pageNum = page ? parseInt(page, 10) : undefined;
-    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    const pageNum = page ? Number.parseInt(page, 10) : undefined;
+    const limitNum = limit ? Number.parseInt(limit, 10) : undefined;
     return this.notificationsService.getUserNotifications(
       req.user.id,
       pageNum,

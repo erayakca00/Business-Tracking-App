@@ -1,16 +1,13 @@
 import React from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
-import { TextInput, Button, Text, Title, useTheme } from 'react-native-paper';
+import { View, StyleSheet, Alert, Image } from 'react-native';
+import { TextInput, Button, Text, useTheme } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
-import { useDispatch } from 'react-redux';
-import { setCredentials } from './authSlice';
 import { useRegisterMutation } from '../../services/authApi';
 import { useNavigation } from '@react-navigation/native';
 
 const RegisterScreen = () => {
     const theme = useTheme();
     const navigation = useNavigation();
-    const dispatch = useDispatch();
     const [register, { isLoading }] = useRegisterMutation();
 
     const { control, handleSubmit, formState: { errors } } = useForm({
@@ -40,7 +37,11 @@ const RegisterScreen = () => {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            <Title style={styles.title}>Register</Title>
+            <View style={styles.logoContainer}>
+                <Image source={require('../../assets/logo.png')} style={styles.logo} />
+                <Text variant="headlineSmall" style={[styles.brandName, { color: theme.colors.primary }]}>Business Tracking App</Text>
+            </View>
+            <Text variant="titleMedium" style={[styles.title, { color: theme.colors.outline }]}>Register</Text>
 
             <Controller
                 control={control}
@@ -130,10 +131,25 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         // backgroundColor removed
     },
+    logoContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    logo: {
+        width: 80,
+        height: 80,
+        borderRadius: 16,
+        marginBottom: 10,
+    },
+    brandName: {
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
     title: {
-        fontSize: 24,
+        fontSize: 18,
         marginBottom: 20,
         textAlign: 'center',
+        fontWeight: '500',
     },
     input: {
         marginBottom: 10,

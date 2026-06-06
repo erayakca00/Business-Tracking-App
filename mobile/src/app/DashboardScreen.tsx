@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Text, Button, Card, FAB, Portal, Modal, TextInput, ActivityIndicator, useTheme, IconButton, Badge } from 'react-native-paper';
+import { View, StyleSheet, FlatList, RefreshControl, Image } from 'react-native';
+import { Text, Button, Card, FAB as PaperFAB, Portal, Modal, TextInput, ActivityIndicator, useTheme, IconButton } from 'react-native-paper';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import { RootState } from './store';
 import { useGetGroupsQuery, useCreateGroupMutation } from '../services/groupsApi';
 import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
-import { useGetUnreadCountQuery } from '../services/notificationsApi';
+
 
 const DashboardScreen = () => {
     const theme = useTheme();
@@ -16,10 +16,7 @@ const DashboardScreen = () => {
     const user = useSelector((state: RootState) => state.auth.user);
     const { data: groups, isLoading, error, refetch } = useGetGroupsQuery();
     const [createGroup, { isLoading: isCreating }] = useCreateGroupMutation();
-    const { data: unreadData } = useGetUnreadCountQuery(undefined, {
-        pollingInterval: 30000, // refresh every 30s
-    });
-    const unreadCount = unreadData?.count ?? 0;
+
 
     const [visible, setVisible] = useState(false);
     const [groupName, setGroupName] = useState('');
@@ -84,11 +81,45 @@ const DashboardScreen = () => {
         </Card>
     );
 
+    const renderContent = () => {
+        if (isLoading && !refreshing) {
+            return <ActivityIndicator animating={true} style={styles.loader} />;
+        }
+        if (error) {
+            return (
+                <View style={styles.errorContainer}>
+                    <Text style={styles.error}>Error loading groups</Text>
+                    <Button mode="outlined" onPress={() => refetch()} style={styles.retryBtn}>
+                        Retry
+                    </Button>
+                </View>
+            );
+        }
+        return (
+            <FlatList
+                data={groups}
+                renderItem={renderGroupItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.list}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />
+                }
+                ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                        <Text style={[styles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>No Groups Yet</Text>
+                        <Text style={[styles.emptyText, { color: theme.colors.outline }]}>Create your first group to get started!</Text>
+                    </View>
+                }
+            />
+        );
+    };
+
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Custom Welcome Header */}
             <View style={[styles.headerContainer, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.outlineVariant }]}>
-                <View style={{ flex: 1 }}>
+                <Image source={require('../assets/logo.png')} style={styles.headerLogo} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text variant="titleMedium" style={{ color: theme.colors.outline }}>Welcome,</Text>
                     <Text variant="headlineSmall" style={{ fontWeight: 'bold' }}>{user?.name}</Text>
                 </View>
@@ -106,32 +137,7 @@ const DashboardScreen = () => {
                 <Text variant="titleLarge" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>My Groups</Text>
             </View>
 
-            {isLoading && !refreshing ? (
-                <ActivityIndicator animating={true} style={styles.loader} />
-            ) : error ? (
-                <View style={styles.errorContainer}>
-                    <Text style={styles.error}>Error loading groups</Text>
-                    <Button mode="outlined" onPress={() => refetch()} style={styles.retryBtn}>
-                        Retry
-                    </Button>
-                </View>
-            ) : (
-                <FlatList
-                    data={groups}
-                    renderItem={renderGroupItem}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={styles.list}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />
-                    }
-                    ListEmptyComponent={
-                        <View style={styles.emptyContainer}>
-                            <Text style={[styles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>No Groups Yet</Text>
-                            <Text style={[styles.emptyText, { color: theme.colors.outline }]}>Create your first group to get started!</Text>
-                        </View>
-                    }
-                />
-            )}
+            {renderContent()}
 
             <Portal>
                 <Modal visible={visible} onDismiss={hideModal} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
@@ -154,7 +160,7 @@ const DashboardScreen = () => {
                 </Modal>
             </Portal>
 
-            <FAB
+            <PaperFAB
                 style={styles.fab}
                 icon="plus"
                 onPress={showModal}
@@ -167,6 +173,11 @@ const DashboardScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+    },
+    headerLogo: {
+        width: 45,
+        height: 45,
+        borderRadius: 8,
     },
     headerContainer: {
         flexDirection: 'row',

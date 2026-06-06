@@ -15,7 +15,7 @@ function sanitize(val: any): any {
   }
   if (val !== null && typeof val === 'object') {
     for (const key in val) {
-      if (Object.prototype.hasOwnProperty.call(val, key)) {
+      if (Object.hasOwn(val, key)) {
         val[key] = sanitize(val[key]);
       }
     }
@@ -26,7 +26,7 @@ function sanitize(val: any): any {
 function sanitizeInPlace(obj: any): void {
   if (obj !== null && typeof obj === 'object') {
     for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      if (Object.hasOwn(obj, key)) {
         obj[key] = sanitize(obj[key]);
       }
     }

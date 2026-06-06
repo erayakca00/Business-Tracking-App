@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
 import { User } from '../database/entities/user.entity';
 import { RegisterDto, LoginDto, AuthResponseDto } from './dto/auth.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
@@ -18,9 +18,9 @@ import { MailService } from '../mail/mail.service';
 export class AuthService {
   constructor(
     @InjectRepository(User)
-    private userRepository: Repository<User>,
-    private jwtService: JwtService,
-    private mailService: MailService,
+    private readonly userRepository: Repository<User>,
+    private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   /**
@@ -56,8 +56,7 @@ export class AuthService {
     await this.userRepository.save(user);
 
     return {
-      message:
-        'Registration successful. You can now log in immediately.',
+      message: 'Registration successful. You can now log in immediately.',
     };
   }
 
@@ -139,8 +138,7 @@ export class AuthService {
     });
 
     if (
-      !user ||
-      !user.resetTokenExpiry ||
+      !user?.resetTokenExpiry ||
       user.resetTokenExpiry.getTime() < Date.now()
     ) {
       throw new BadRequestException('Invalid or expired reset token.');
@@ -171,6 +169,5 @@ export class AuthService {
     } else {
       throw new UnauthorizedException('Incorrect password');
     }
-    return null;
   }
 }

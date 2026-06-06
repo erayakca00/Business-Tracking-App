@@ -26,7 +26,9 @@ const getPriorityColor = (priority: string) => {
     }
 };
 
-const STATUS_FILTERS: { key: 'active' | 'all' | 'todo' | 'in_progress' | 'review' | 'blocked' | 'done'; label: string }[] = [
+type StatusFilterType = 'active' | 'all' | 'todo' | 'in_progress' | 'review' | 'blocked' | 'done';
+
+const STATUS_FILTERS: { key: StatusFilterType; label: string }[] = [
     { key: 'active', label: 'Active Tasks' },
     { key: 'all', label: 'All Statuses' },
     { key: 'todo', label: 'To Do' },
@@ -36,6 +38,131 @@ const STATUS_FILTERS: { key: 'active' | 'all' | 'todo' | 'in_progress' | 'review
     { key: 'done', label: 'Done' },
 ];
 
+const renderTasksContentHelper = ({
+    isLoading,
+    tasks,
+    theme,
+    uniqueGroups,
+    selectedGroup,
+    setSelectedGroup,
+    statusFilter,
+    setStatusFilter,
+    getFilteredTasks,
+    renderTaskItem,
+    isFetching,
+    refetch,
+}: {
+    isLoading: boolean;
+    tasks: any[];
+    theme: any;
+    uniqueGroups: any[];
+    selectedGroup: string | null;
+    setSelectedGroup: (g: string | null) => void;
+    statusFilter: StatusFilterType;
+    setStatusFilter: (f: any) => void;
+    getFilteredTasks: () => any[];
+    renderTaskItem: (item: { item: any }) => React.ReactElement;
+    isFetching: boolean;
+    refetch: () => void;
+}) => {
+    if (isLoading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
+    }
+
+    if (tasks.length === 0) {
+        return (
+            <View style={styles.emptyContainer}>
+                <Text variant="bodyLarge" style={{ color: theme.colors.outline }}>
+                    You have no assigned tasks.
+                </Text>
+            </View>
+        );
+    }
+
+    return (
+        <>
+            {/* Filters */}
+            <View style={{ backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.outlineVariant, paddingBottom: 6 }}>
+                {uniqueGroups.length > 0 && (
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        style={{ flexGrow: 0, flexShrink: 0, height: 42, paddingVertical: 4 }}
+                        contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'center' }}
+                    >
+                        <TouchableOpacity
+                            onPress={() => setSelectedGroup(null)}
+                            style={[
+                                styles.filterChip, 
+                                { borderColor: theme.colors.primary },
+                                selectedGroup === null && { backgroundColor: theme.colors.primary }
+                            ]}
+                        >
+                            <Text style={{ color: selectedGroup === null ? '#fff' : theme.colors.primary, fontSize: 11, fontWeight: '500' }}>All Groups</Text>
+                        </TouchableOpacity>
+                        {uniqueGroups.map(g => (
+                            <TouchableOpacity
+                                key={g.id}
+                                onPress={() => setSelectedGroup(g.id)}
+                                style={[
+                                    styles.filterChip, 
+                                    { borderColor: theme.colors.primary },
+                                    selectedGroup === g.id && { backgroundColor: theme.colors.primary }
+                                ]}
+                            >
+                                <Text style={{ color: selectedGroup === g.id ? '#fff' : theme.colors.primary, fontSize: 11, fontWeight: '500' }}>📁 {g.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                )}
+
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    style={{ flexGrow: 0, flexShrink: 0, height: 38, paddingVertical: 2 }}
+                    contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'center' }}
+                >
+                    {STATUS_FILTERS.map(opt => (
+                        <TouchableOpacity
+                            key={opt.key}
+                            onPress={() => setStatusFilter(opt.key)}
+                            style={[
+                                styles.filterChip, 
+                                { borderColor: theme.colors.secondary },
+                                statusFilter === opt.key && { backgroundColor: theme.colors.secondary }
+                            ]}
+                        >
+                            <Text style={{ color: statusFilter === opt.key ? '#fff' : theme.colors.secondary, fontSize: 10, fontWeight: '500' }}>
+                                {opt.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
+            <FlatList
+                data={getFilteredTasks()}
+                keyExtractor={(item) => item.id}
+                renderItem={renderTaskItem}
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.list}
+                refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} />}
+                ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                        <Text variant="bodyLarge" style={{ color: theme.colors.outline, marginTop: 40 }}>
+                            No tasks match the active filters.
+                        </Text>
+                    </View>
+                }
+            />
+        </>
+    );
+};
+
 const MyTasksScreen = () => {
     const theme = useTheme();
     const { data: tasks = [], isLoading, isFetching, refetch } = useGetMyTasksQuery();
@@ -44,7 +171,7 @@ const MyTasksScreen = () => {
     const [selectedTask, setSelectedTask] = useState<TaskForSheet | null>(null);
 
     const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-    const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'todo' | 'in_progress' | 'review' | 'blocked' | 'done'>('active');
+    const [statusFilter, setStatusFilter] = useState<StatusFilterType>('active');
 
     const uniqueGroups = useMemo(() => {
         const groupMap = new Map<string, string>();
@@ -148,94 +275,20 @@ const MyTasksScreen = () => {
                 <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
                     <Text variant="headlineSmall" style={{ fontWeight: 'bold' }}>My Tasks</Text>
                 </View>
-                {isLoading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" />
-                    </View>
-                ) : tasks.length === 0 ? (
-                    <View style={styles.emptyContainer}>
-                        <Text variant="bodyLarge" style={{ color: theme.colors.outline }}>
-                            You have no assigned tasks.
-                        </Text>
-                    </View>
-                ) : (
-                    <>
-                        {/* Filters */}
-                        <View style={{ backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.outlineVariant, paddingBottom: 6 }}>
-                            {uniqueGroups.length > 0 && (
-                                <ScrollView 
-                                    horizontal 
-                                    showsHorizontalScrollIndicator={false} 
-                                    style={{ flexGrow: 0, flexShrink: 0, height: 42, paddingVertical: 4 }}
-                                    contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'center' }}
-                                >
-                                    <TouchableOpacity
-                                        onPress={() => setSelectedGroup(null)}
-                                        style={[
-                                            styles.filterChip, 
-                                            { borderColor: theme.colors.primary },
-                                            selectedGroup === null && { backgroundColor: theme.colors.primary }
-                                        ]}
-                                    >
-                                        <Text style={{ color: selectedGroup === null ? '#fff' : theme.colors.primary, fontSize: 11, fontWeight: '500' }}>All Groups</Text>
-                                    </TouchableOpacity>
-                                    {uniqueGroups.map(g => (
-                                        <TouchableOpacity
-                                            key={g.id}
-                                            onPress={() => setSelectedGroup(g.id)}
-                                            style={[
-                                                styles.filterChip, 
-                                                { borderColor: theme.colors.primary },
-                                                selectedGroup === g.id && { backgroundColor: theme.colors.primary }
-                                            ]}
-                                        >
-                                            <Text style={{ color: selectedGroup === g.id ? '#fff' : theme.colors.primary, fontSize: 11, fontWeight: '500' }}>📁 {g.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            )}
-
-                            <ScrollView 
-                                horizontal 
-                                showsHorizontalScrollIndicator={false} 
-                                style={{ flexGrow: 0, flexShrink: 0, height: 38, paddingVertical: 2 }}
-                                contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'center' }}
-                            >
-                                {STATUS_FILTERS.map(opt => (
-                                    <TouchableOpacity
-                                        key={opt.key}
-                                        onPress={() => setStatusFilter(opt.key)}
-                                        style={[
-                                            styles.filterChip, 
-                                            { borderColor: theme.colors.secondary },
-                                            statusFilter === opt.key && { backgroundColor: theme.colors.secondary }
-                                        ]}
-                                    >
-                                        <Text style={{ color: statusFilter === opt.key ? '#fff' : theme.colors.secondary, fontSize: 10, fontWeight: '500' }}>
-                                            {opt.label}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
-
-                        <FlatList
-                            data={getFilteredTasks()}
-                            keyExtractor={(item) => item.id}
-                            renderItem={renderTaskItem}
-                            style={{ flex: 1 }}
-                            contentContainerStyle={styles.list}
-                            refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} />}
-                            ListEmptyComponent={
-                                <View style={styles.emptyContainer}>
-                                    <Text variant="bodyLarge" style={{ color: theme.colors.outline, marginTop: 40 }}>
-                                        No tasks match the active filters.
-                                    </Text>
-                                </View>
-                            }
-                        />
-                    </>
-                )}
+                {renderTasksContentHelper({
+                    isLoading,
+                    tasks,
+                    theme,
+                    uniqueGroups,
+                    selectedGroup,
+                    setSelectedGroup,
+                    statusFilter,
+                    setStatusFilter,
+                    getFilteredTasks,
+                    renderTaskItem,
+                    isFetching,
+                    refetch,
+                })}
             </View>
 
             <TaskDetailSheet

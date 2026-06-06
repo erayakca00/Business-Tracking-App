@@ -59,7 +59,7 @@ const NotificationBell = () => {
             try {
                 // Fetch the task to get its groupId so we can route the user 
                 const taskRes = await api.get(`/tasks/${notification.taskId}`);
-                if (taskRes.data && taskRes.data.groupId) {
+                if (taskRes.data?.groupId) {
                     navigate(`/groups/${taskRes.data.groupId}?taskId=${notification.taskId}`);
                 } else {
                     navigate('/dashboard');
@@ -116,10 +116,11 @@ const NotificationBell = () => {
                             </div>
                         ) : (
                             notifications.map(notification => (
-                                <div
+                                <button
+                                    type="button"
                                     key={notification.id}
                                     onClick={() => handleNotificationClick(notification)}
-                                    className={`px-4 py-3 pb-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-0 ${!notification.isRead ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}
+                                    className={`w-full text-left block px-4 py-3 pb-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-0 ${notification.isRead ? '' : 'bg-blue-50/50 dark:bg-blue-900/20'}`}
                                 >
                                     <div className="flex gap-3">
                                         <div className="flex-shrink-0 mt-0.5">
@@ -147,7 +148,7 @@ const NotificationBell = () => {
                                             </div>
                                         )}
                                     </div>
-                                </div>
+                                </button>
                             ))
                         )}
                     </div>

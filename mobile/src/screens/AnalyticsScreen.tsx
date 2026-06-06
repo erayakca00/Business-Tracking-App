@@ -96,9 +96,9 @@ const AnalyticsScreen = () => {
     // Member Workloads
     const memberWorkloads = useMemo(() => {
         if (!analytics?.memberWorkload) return [];
-        return Object.entries(analytics.memberWorkload).map(([name, count]) => ({
-            name,
-            count: count as number,
+        return (analytics.memberWorkload as any[]).map((m: any) => ({
+            name: m.name,
+            count: m.openTasks || 0,
         })).sort((a, b) => b.count - a.count);
     }, [analytics]);
 

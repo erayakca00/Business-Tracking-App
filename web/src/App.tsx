@@ -12,6 +12,8 @@ import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
 import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
+import MyTasks from './pages/MyTasks';
 
 function App() {
     return (
@@ -23,53 +25,20 @@ function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/invite" element={<AcceptInvite />} />
             <Route
-                path="/dashboard"
                 element={
                     <ProtectedRoute>
-                        <Dashboard />
+                        <Layout />
                     </ProtectedRoute>
                 }
-            />
-            <Route
-                path="/groups/:groupId"
-                element={
-                    <ProtectedRoute>
-                        <GroupDetails />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/groups/:groupId/sprints"
-                element={
-                    <ProtectedRoute>
-                        <SprintPlanning />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/groups/:groupId/analytics"
-                element={
-                    <ProtectedRoute>
-                        <Analytics />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/profile"
-                element={
-                    <ProtectedRoute>
-                        <Profile />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/settings"
-                element={
-                    <ProtectedRoute>
-                        <Settings />
-                    </ProtectedRoute>
-                }
-            />
+            >
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/my-tasks" element={<MyTasks />} />
+                <Route path="/groups/:groupId" element={<GroupDetails />} />
+                <Route path="/groups/:groupId/sprints" element={<SprintPlanning />} />
+                <Route path="/groups/:groupId/analytics" element={<Analytics />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/settings" element={<Settings />} />
+            </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
     );

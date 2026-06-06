@@ -7,7 +7,7 @@ interface SprintBannerProps {
     groupId: string;
 }
 
-export default function SprintBanner({ groupId }: SprintBannerProps) {
+export default function SprintBanner({ groupId }: Readonly<SprintBannerProps>) {
     const [activeSprint, setActiveSprint] = useState<any>(null);
 
     useEffect(() => {
@@ -26,6 +26,17 @@ export default function SprintBanner({ groupId }: SprintBannerProps) {
     const daysRemaining = activeSprint.endDate
         ? Math.ceil((new Date(activeSprint.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         : null;
+
+    let timerColorClass = 'text-white/80';
+    let timerText = '';
+    if (daysRemaining !== null) {
+        if (daysRemaining < 0) {
+            timerColorClass = 'text-red-300';
+        } else if (daysRemaining <= 3) {
+            timerColorClass = 'text-yellow-300';
+        }
+        timerText = daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d left`;
+    }
 
     return (
         <Link
@@ -47,9 +58,9 @@ export default function SprintBanner({ groupId }: SprintBannerProps) {
                     </div>
                     <span className="text-xs opacity-90">{doneTasks}/{totalTasks} done</span>
                     {daysRemaining !== null && (
-                        <span className={`flex items-center gap-1 text-xs font-medium ${daysRemaining < 0 ? 'text-red-300' : daysRemaining <= 3 ? 'text-yellow-300' : 'text-white/80'}`}>
+                        <span className={`flex items-center gap-1 text-xs font-medium ${timerColorClass}`}>
                             <Clock size={11} />
-                            {daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d left`}
+                            {timerText}
                         </span>
                     )}
                 </div>

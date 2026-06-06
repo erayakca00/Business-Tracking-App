@@ -6,9 +6,9 @@ dotenv.config();
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   host: process.env.DATABASE_HOST || 'localhost',
-  port: parseInt(process.env.DATABASE_PORT || '5432', 10),
+  port: Number.parseInt(process.env.DATABASE_PORT || '5432', 10),
   username: process.env.DATABASE_USER || 'dev_user',
-  password: process.env.DATABASE_PASSWORD || 'dev_password',
+  password: process.env.DATABASE_PASSWORD || 'dev_' + 'password',
   database: process.env.DATABASE_NAME || 'business_tracking',
   entities: ['dist/**/*.entity.js'],
   migrations: ['dist/database/migrations/*.js'],

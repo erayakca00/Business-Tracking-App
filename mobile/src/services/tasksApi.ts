@@ -1,11 +1,14 @@
 import { api } from './api';
 
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
+
 export interface Task {
     id: string;
     title: string;
     description: string;
-    status: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
-    priority: 'low' | 'medium' | 'high';
+    status: TaskStatus;
+    priority: TaskPriority;
     dueDate?: string;
     completedAt?: string;
     groupId: string;
@@ -40,7 +43,7 @@ export interface TimeLog {
 export interface CreateTaskDto {
     title: string;
     description?: string;
-    priority?: 'low' | 'medium' | 'high';
+    priority?: TaskPriority;
     dueDate?: string;
     groupId: string;
     assignedToId?: string | null;
@@ -50,8 +53,8 @@ export interface CreateTaskDto {
 export interface UpdateTaskDto {
     title?: string;
     description?: string;
-    status?: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
-    priority?: 'low' | 'medium' | 'high';
+    status?: TaskStatus;
+    priority?: TaskPriority;
     dueDate?: string | null;
     assignedToId?: string | null;
     projectTag?: string;

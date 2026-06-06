@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
 import {
   Invitation,
   InvitationStatus,
@@ -51,7 +51,7 @@ export class InvitationsService {
       where: { userId, groupId },
     });
 
-    if (!userGroup || userGroup.role !== UserRole.ADMIN) {
+    if (userGroup?.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Only group admins can manage invitations.');
     }
 
@@ -158,8 +158,7 @@ export class InvitationsService {
     });
 
     if (
-      !invitation ||
-      invitation.status !== InvitationStatus.PENDING ||
+      invitation?.status !== InvitationStatus.PENDING ||
       invitation.expiresAt.getTime() < Date.now()
     ) {
       throw new BadRequestException('Invitation is invalid or has expired.');
@@ -184,8 +183,7 @@ export class InvitationsService {
     });
 
     if (
-      !invitation ||
-      invitation.status !== InvitationStatus.PENDING ||
+      invitation?.status !== InvitationStatus.PENDING ||
       invitation.expiresAt.getTime() < Date.now()
     ) {
       throw new BadRequestException('Invitation is invalid or has expired.');

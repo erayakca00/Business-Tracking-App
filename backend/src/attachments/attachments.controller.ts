@@ -14,11 +14,8 @@ import {
   FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
-import { extname } from 'path';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AttachmentsService } from './attachments.service';
-import { v4 as uuidv4 } from 'uuid';
 import { TasksService } from '../tasks/tasks.service';
 import { Throttle } from '@nestjs/throttler';
 
@@ -26,15 +23,15 @@ import { Throttle } from '@nestjs/throttler';
 @UseGuards(JwtAuthGuard)
 export class AttachmentsController {
   constructor(
-    private attachmentsService: AttachmentsService,
-    private tasksService: TasksService,
+    private readonly attachmentsService: AttachmentsService,
+    private readonly tasksService: TasksService,
   ) {}
 
   @Post()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
   async uploadFile(

@@ -9,7 +9,7 @@ import {
     ScrollView,
     ActivityIndicator,
 } from 'react-native';
-import BottomSheet, { BottomSheetView, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Text, TextInput, IconButton, Chip, Divider, useTheme, Button, Menu, Portal, Modal } from 'react-native-paper';
 import { useSelector } from 'react-redux';
 import { RootState } from '../app/store';
@@ -37,12 +37,15 @@ import { useCreateTemplateMutation } from '../services/templatesApi';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export type TaskStatusType = 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
+export type TaskPriorityType = 'low' | 'medium' | 'high';
+
 export interface TaskForSheet {
     id: string;
     title: string;
     description?: string;
-    status: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked';
-    priority: 'low' | 'medium' | 'high';
+    status: TaskStatusType;
+    priority: TaskPriorityType;
     dueDate?: string;
     projectTag?: string;
     effort?: number;
@@ -69,7 +72,7 @@ interface TaskDetailSheetProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS: { key: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked'; label: string; icon: string }[] = [
+const STATUS_OPTIONS: { key: TaskStatusType; label: string; icon: string }[] = [
     { key: 'todo', label: 'To Do', icon: 'circle-outline' },
     { key: 'in_progress', label: 'In Progress', icon: 'progress-clock' },
     { key: 'review', label: 'In Review', icon: 'eye-outline' },
@@ -77,7 +80,7 @@ const STATUS_OPTIONS: { key: 'todo' | 'in_progress' | 'review' | 'done' | 'block
     { key: 'blocked', label: 'Blocked', icon: 'alert-octagon-outline' },
 ];
 
-const PRIORITY_OPTIONS: { key: 'low' | 'medium' | 'high'; label: string }[] = [
+const PRIORITY_OPTIONS: { key: TaskPriorityType; label: string }[] = [
     { key: 'low', label: 'Low' },
     { key: 'medium', label: 'Medium' },
     { key: 'high', label: 'High' },
@@ -119,14 +122,14 @@ const getInitials = (name: string) =>
 const getActivityLabel = (type: string, data?: { from?: string; to?: string }): string => {
     switch (type) {
         case 'created': return 'created this task';
-        case 'status_changed': return `changed status: ${data?.from?.replace('_', ' ')} → ${data?.to?.replace('_', ' ')}`;
+        case 'status_changed': return `changed status: ${data?.from?.replaceAll('_', ' ')} → ${data?.to?.replaceAll('_', ' ')}`;
         case 'priority_changed': return `changed priority: ${data?.from} → ${data?.to}`;
         case 'title_changed': return `renamed: "${data?.from}" → "${data?.to}"`;
         case 'description_changed': return 'updated the description';
         case 'due_date_changed': return `set deadline to ${data?.to ? formatDate(data.to) : 'none'}`;
         case 'tag_changed': return `changed tag: ${data?.from || '—'} → ${data?.to || '—'}`;
         case 'effort_changed': return `changed effort: ${data?.from} → ${data?.to}`;
-        default: return type.replace(/_/g, ' ');
+        default: return type.replaceAll('_', ' ');
     }
 };
 
@@ -288,7 +291,7 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
         }
     };
 
-    const handleStatusChange = async (status: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked') => {
+    const handleStatusChange = async (status: TaskStatusType) => {
         if (!task || !canEdit) return;
         setStatusMenuVisible(false);
         try {
@@ -303,7 +306,7 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
         }
     };
 
-    const handlePriorityChange = async (priority: 'low' | 'medium' | 'high') => {
+    const handlePriorityChange = async (priority: TaskPriorityType) => {
         if (!task || !canEdit) return;
         setPriorityMenuVisible(false);
         try {
@@ -377,11 +380,11 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
 
     const handleLogManualTime = async () => {
         if (!task) return;
-        const hours = parseInt(manualHours || '0', 10);
-        const minutes = parseInt(manualMinutes || '0', 10);
+        const hours = Number.parseInt(manualHours || '0', 10);
+        const minutes = Number.parseInt(manualMinutes || '0', 10);
         const durationSeconds = (hours * 3600) + (minutes * 60);
 
-        if (isNaN(durationSeconds) || durationSeconds <= 0) {
+        if (Number.isNaN(durationSeconds) || durationSeconds <= 0) {
             Toast.show({
                 type: 'error',
                 text1: 'Validation Error',
@@ -457,24 +460,27 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
 
     // ─── Details Tab ─────────────────────────────────────────────────────────
 
-    const renderDetails = () => (
-        <BottomSheetScrollView contentContainerStyle={styles.tabContent}>
-            {/* Blocked Warning Banner */}
-            {isBlocked && (
-                <View style={[styles.blockedBanner, { backgroundColor: '#FFEBEE' }]}>
-                    <IconButton icon="alert-octagon" iconColor="#D32F2F" size={24} style={{ margin: 0 }} />
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#C62828', fontWeight: 'bold' }}>
-                            This task is currently blocked
-                        </Text>
-                        <Text style={{ color: '#C62828', fontSize: 12 }}>
-                            Active blockers: {activeBlockers.map((b: Task) => b.title).join(', ')}
-                        </Text>
-                    </View>
-                </View>
-            )}
+    // ─── Details Tab ─────────────────────────────────────────────────────────
 
-            {/* Status & Priority Row */}
+    const renderBlockedWarningBanner = () => {
+        if (!isBlocked) return null;
+        return (
+            <View style={[styles.blockedBanner, { backgroundColor: '#FFEBEE' }]}>
+                <IconButton icon="alert-octagon" iconColor="#D32F2F" size={24} style={{ margin: 0 }} />
+                <View style={{ flex: 1 }}>
+                    <Text style={{ color: '#C62828', fontWeight: 'bold' }}>
+                        This task is currently blocked
+                    </Text>
+                    <Text style={{ color: '#C62828', fontSize: 12 }}>
+                        Active blockers: {activeBlockers.map((b: Task) => b.title).join(', ')}
+                    </Text>
+                </View>
+            </View>
+        );
+    };
+
+    const renderStatusAndPriorityRow = () => {
+        return (
             <View style={styles.badgeRow}>
                 <Menu
                     visible={statusMenuVisible}
@@ -486,7 +492,7 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
                                 textStyle={styles.chipText}
                                 icon="circle-outline"
                             >
-                                {task.status.replace('_', ' ')}
+                                {task.status.replaceAll('_', ' ')}
                             </Chip>
                         </TouchableOpacity>
                     }
@@ -535,72 +541,95 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
                     </Chip>
                 )}
             </View>
+        );
+    };
 
-            {/* Description */}
-            {task.description ? (
+    const renderDescriptionSection = () => {
+        if (task.description) {
+            return (
                 <View style={[styles.section, { backgroundColor: theme.colors.surfaceVariant }]}>
                     <Text style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>DESCRIPTION</Text>
                     <Text style={[styles.descriptionText, { color: theme.colors.onSurface }]}>{task.description}</Text>
                 </View>
-            ) : (
-                <View style={[styles.section, { backgroundColor: theme.colors.surfaceVariant }]}>
-                    <Text style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>DESCRIPTION</Text>
-                    <Text style={{ color: theme.colors.outline, fontStyle: 'italic' }}>No description provided.</Text>
-                </View>
-            )}
+            );
+        }
+        return (
+            <View style={[styles.section, { backgroundColor: theme.colors.surfaceVariant }]}>
+                <Text style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>DESCRIPTION</Text>
+                <Text style={{ color: theme.colors.outline, fontStyle: 'italic' }}>No description provided.</Text>
+            </View>
+        );
+    };
 
-            {/* AI Task Summary */}
-            <View style={[
-                styles.section, 
-                { 
-                    backgroundColor: theme.dark ? '#311B92' : '#EDE7F6', 
-                    borderColor: theme.dark ? '#7E57C2' : '#D1C4E9', 
-                    borderWidth: 1 
-                }
-            ]}>
+    const renderAISummaryContent = () => {
+        const primaryColor = theme.dark ? '#D1C4E9' : '#5E35B1';
+        const outlineColor = theme.dark ? '#B39DDB' : theme.colors.outline;
+        const textColor = theme.dark ? '#FFFFFF' : theme.colors.onSurface;
+        const buttonBorderColor = theme.dark ? '#7E57C2' : '#5E35B1';
+
+        if (isSummarizing) {
+            return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10 }}>
+                    <ActivityIndicator size="small" color={primaryColor} style={{ marginRight: 8 }} />
+                    <Text style={{ color: primaryColor, fontSize: 12 }}>Generating summary...</Text>
+                </View>
+            );
+        }
+        if (task.aiSummary) {
+            return (
+                <View>
+                    <Text style={[styles.descriptionText, { color: textColor, fontSize: 13, lineHeight: 19 }]}>{task.aiSummary}</Text>
+                    {task.aiSummaryUpdatedAt ? (
+                        <Text style={{ fontSize: 9, color: outlineColor, marginTop: 6 }}>
+                            Generated {formatDate(task.aiSummaryUpdatedAt)} at {formatTime(task.aiSummaryUpdatedAt)}
+                        </Text>
+                    ) : null}
+                </View>
+            );
+        }
+        return (
+            <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+                <Text style={{ color: outlineColor, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+                    Generate a quick 3-sentence summary of the task's progress, activities, and comments.
+                </Text>
+                <Button
+                    mode="outlined"
+                    compact
+                    onPress={handleSummarize}
+                    icon="creation"
+                    textColor={primaryColor}
+                    style={{ borderColor: buttonBorderColor, borderRadius: 8 }}
+                    labelStyle={{ fontSize: 12 }}
+                >
+                    Summarize with AI
+                </Button>
+            </View>
+        );
+    };
+
+    const renderAISummarySection = () => {
+        const bg = theme.dark ? '#311B92' : '#EDE7F6';
+        const border = theme.dark ? '#7E57C2' : '#D1C4E9';
+        const textCol = theme.dark ? '#D1C4E9' : '#5E35B1';
+        const linkCol = theme.dark ? '#B39DDB' : theme.colors.primary;
+
+        return (
+            <View style={[styles.section, { backgroundColor: bg, borderColor: border, borderWidth: 1 }]}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <Text style={[styles.sectionLabel, { color: theme.dark ? '#D1C4E9' : '#5E35B1', marginBottom: 0 }]}>✨ AI TASK SUMMARY</Text>
+                    <Text style={[styles.sectionLabel, { color: textCol, marginBottom: 0 }]}>✨ AI TASK SUMMARY</Text>
                     {task.aiSummary && !isSummarizing ? (
                         <TouchableOpacity onPress={handleSummarize}>
-                            <Text style={{ color: theme.dark ? '#B39DDB' : theme.colors.primary, fontSize: 11, fontWeight: 'bold' }}>Regenerate</Text>
+                            <Text style={{ color: linkCol, fontSize: 11, fontWeight: 'bold' }}>Regenerate</Text>
                         </TouchableOpacity>
                     ) : null}
                 </View>
-                {isSummarizing ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10 }}>
-                        <ActivityIndicator size="small" color={theme.dark ? '#D1C4E9' : '#5E35B1'} style={{ marginRight: 8 }} />
-                        <Text style={{ color: theme.dark ? '#D1C4E9' : '#5E35B1', fontSize: 12 }}>Generating summary...</Text>
-                    </View>
-                ) : task.aiSummary ? (
-                    <View>
-                        <Text style={[styles.descriptionText, { color: theme.dark ? '#FFFFFF' : theme.colors.onSurface, fontSize: 13, lineHeight: 19 }]}>{task.aiSummary}</Text>
-                        {task.aiSummaryUpdatedAt ? (
-                            <Text style={{ fontSize: 9, color: theme.dark ? '#B39DDB' : theme.colors.outline, marginTop: 6 }}>
-                                Generated {formatDate(task.aiSummaryUpdatedAt)} at {formatTime(task.aiSummaryUpdatedAt)}
-                            </Text>
-                        ) : null}
-                    </View>
-                ) : (
-                    <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-                        <Text style={{ color: theme.dark ? '#B39DDB' : theme.colors.outline, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
-                            Generate a quick 3-sentence summary of the task's progress, activities, and comments.
-                        </Text>
-                        <Button
-                            mode="outlined"
-                            compact
-                            onPress={handleSummarize}
-                            icon="creation"
-                            textColor={theme.dark ? '#D1C4E9' : '#5E35B1'}
-                            style={{ borderColor: theme.dark ? '#7E57C2' : '#5E35B1', borderRadius: 8 }}
-                            labelStyle={{ fontSize: 12 }}
-                        >
-                            Summarize with AI
-                        </Button>
-                    </View>
-                )}
+                {renderAISummaryContent()}
             </View>
+        );
+    };
 
-            {/* Meta Info Grid */}
+    const renderMetaInfoGrid = () => {
+        return (
             <View style={styles.metaGrid}>
                 <View style={[styles.metaItem, { backgroundColor: theme.colors.surface }]}>
                     <IconButton icon="account-outline" size={18} iconColor={theme.colors.primary} style={styles.metaIcon} />
@@ -646,214 +675,242 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
                     </View>
                 </View>
             </View>
+        );
+    };
 
-            <Divider style={{ marginVertical: 16 }} />
+    const renderDependenciesSection = () => {
+        return (
+            <>
+                <View style={styles.sectionHeaderRow}>
+                    <Text style={[styles.sectionTitleLabel, { color: theme.colors.onSurface }]}>Dependencies</Text>
+                    {canEdit && allTasks && allTasks.length > 0 && (
+                        <Button
+                            compact
+                            mode="text"
+                            onPress={() => setBlockerModalVisible(true)}
+                            icon="plus"
+                        >
+                            Add Blocker
+                        </Button>
+                    )}
+                </View>
 
-            {/* Dependencies Section */}
-            <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitleLabel, { color: theme.colors.onSurface }]}>Dependencies</Text>
-                {canEdit && allTasks && allTasks.length > 0 && (
-                    <Button
-                        compact
-                        mode="text"
-                        onPress={() => setBlockerModalVisible(true)}
-                        icon="plus"
-                    >
-                        Add Blocker
-                    </Button>
-                )}
-            </View>
-
-            <View style={styles.dependencyContainer}>
-                {/* Blocked By List */}
-                <Text style={styles.subSectionLabel}>Blocked By</Text>
-                {(!task.blockedBy || task.blockedBy.length === 0) ? (
-                    <Text style={styles.emptyText}>No blockers. This task is free to start!</Text>
-                ) : (
-                    task.blockedBy.map(b => (
-                        <View key={b.id} style={styles.dependencyItem}>
-                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                                <Chip
-                                    compact
-                                    style={{ backgroundColor: getStatusColor(b.status), marginRight: 6 }}
-                                    textStyle={{ fontSize: 9, color: '#fff', textTransform: 'capitalize' }}
-                                >
-                                    {b.status}
-                                </Chip>
-                                <Text style={styles.dependencyTitle} numberOfLines={1}>{b.title}</Text>
+                <View style={styles.dependencyContainer}>
+                    {/* Blocked By List */}
+                    <Text style={styles.subSectionLabel}>Blocked By</Text>
+                    {(!task.blockedBy || task.blockedBy.length === 0) ? (
+                        <Text style={styles.emptyText}>No blockers. This task is free to start!</Text>
+                    ) : (
+                        task.blockedBy.map(b => (
+                            <View key={b.id} style={styles.dependencyItem}>
+                                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                                    <Chip
+                                        compact
+                                        style={{ backgroundColor: getStatusColor(b.status), marginRight: 6 }}
+                                        textStyle={{ fontSize: 9, color: '#fff', textTransform: 'capitalize' }}
+                                    >
+                                        {b.status}
+                                    </Chip>
+                                    <Text style={styles.dependencyTitle} numberOfLines={1}>{b.title}</Text>
+                                </View>
+                                {canEdit && (
+                                    <IconButton
+                                        icon="close-circle-outline"
+                                        size={20}
+                                        iconColor={theme.colors.error}
+                                        onPress={() => handleRemoveBlocker(b.id)}
+                                        style={{ margin: 0 }}
+                                    />
+                                )}
                             </View>
-                            {canEdit && (
-                                <IconButton
-                                    icon="close-circle-outline"
-                                    size={20}
-                                    iconColor={theme.colors.error}
-                                    onPress={() => handleRemoveBlocker(b.id)}
-                                    style={{ margin: 0 }}
-                                />
-                            )}
-                        </View>
-                    ))
-                )}
+                        ))
+                    )}
 
-                {/* Blocking List */}
-                <Text style={[styles.subSectionLabel, { marginTop: 12 }]}>Blocking</Text>
-                {(!task.blocking || task.blocking.length === 0) ? (
-                    <Text style={styles.emptyText}>Not blocking any other tasks.</Text>
-                ) : (
-                    task.blocking.map(b => (
-                        <View key={b.id} style={styles.dependencyItem}>
-                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                                <Chip
-                                    compact
-                                    style={{ backgroundColor: getStatusColor(b.status), marginRight: 6 }}
-                                    textStyle={{ fontSize: 9, color: '#fff', textTransform: 'capitalize' }}
-                                >
-                                    {b.status}
-                                </Chip>
-                                <Text style={styles.dependencyTitle} numberOfLines={1}>{b.title}</Text>
+                    {/* Blocking List */}
+                    <Text style={[styles.subSectionLabel, { marginTop: 12 }]}>Blocking</Text>
+                    {(!task.blocking || task.blocking.length === 0) ? (
+                        <Text style={styles.emptyText}>Not blocking any other tasks.</Text>
+                    ) : (
+                        task.blocking.map(b => (
+                            <View key={b.id} style={styles.dependencyItem}>
+                                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                                    <Chip
+                                        compact
+                                        style={{ backgroundColor: getStatusColor(b.status), marginRight: 6 }}
+                                        textStyle={{ fontSize: 9, color: '#fff', textTransform: 'capitalize' }}
+                                    >
+                                        {b.status}
+                                    </Chip>
+                                    <Text style={styles.dependencyTitle} numberOfLines={1}>{b.title}</Text>
+                                </View>
                             </View>
-                        </View>
-                    ))
-                )}
-            </View>
+                        ))
+                    )}
+                </View>
+            </>
+        );
+    };
 
-            <Divider style={{ marginVertical: 16 }} />
-
-            {/* Time Tracking Section */}
-            <Text style={[styles.sectionTitleLabel, { color: theme.colors.onSurface, marginBottom: 12 }]}>Time Tracking</Text>
-
-            {/* Active Timer Banner / Live Stopwatch */}
-            {activeTimer ? (
-                <View style={[styles.activeTimerBanner, { backgroundColor: '#E8F5E9' }]}>
-                    <IconButton icon="play-circle" iconColor="#4CAF50" size={28} style={{ margin: 0 }} />
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#2E7D32', fontWeight: 'bold' }}>
-                            Timer Running
-                        </Text>
-                        {activeTimer.note ? (
-                            <Text style={{ color: '#2E7D32', fontSize: 11 }} numberOfLines={1}>
-                                "{activeTimer.note}"
-                            </Text>
-                        ) : null}
-                    </View>
-                    <Text style={[styles.stopwatchText, { color: '#2E7D32' }]}>
-                        {formatDuration(elapsedSeconds)}
+    const renderLogHistory = () => {
+        if (logsLoading) {
+            return <ActivityIndicator style={{ marginVertical: 10 }} />;
+        }
+        if (timeLogs.length === 0) {
+            return <Text style={styles.emptyText}>No time logged yet.</Text>;
+        }
+        return timeLogs.map((log: TimeLog) => (
+            <View key={log.id} style={[styles.logRow, { borderBottomColor: theme.colors.outlineVariant }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 13, color: theme.colors.onSurface }}>
+                        {log.user?.name || 'Someone'}
                     </Text>
-                    <Button
-                        mode="contained"
-                        onPress={handleStopTimer}
-                        loading={isStoppingTimer}
-                        style={{ marginLeft: 10, backgroundColor: '#D32F2F' }}
-                        textColor="#fff"
-                    >
-                        Stop
-                    </Button>
+                    <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 13 }}>
+                        {log.duration ? formatDuration(log.duration) : 'Active'}
+                    </Text>
                 </View>
-            ) : (
-                <View style={styles.startTimerRow}>
-                    <TextInput
-                        mode="outlined"
-                        dense
-                        label="Timer note (optional)"
-                        placeholder="What are you working on?"
-                        value={timerNote}
-                        onChangeText={setTimerNote}
-                        style={{ flex: 1, height: 40, backgroundColor: theme.colors.surface }}
-                    />
-                    <Button
-                        mode="contained"
-                        onPress={handleStartTimer}
-                        loading={isStartingTimer}
-                        icon="play"
-                        style={{ marginLeft: 8, height: 40, justifyContent: 'center' }}
-                    >
-                        Start
-                    </Button>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+                    <Text style={{ fontSize: 11, color: theme.colors.outline }}>
+                        {formatDate(log.startedAt)} · {formatTime(log.startedAt)}
+                    </Text>
+                    {log.endedAt ? (
+                        <Text style={{ fontSize: 11, color: theme.colors.outline }}>
+                            to {formatTime(log.endedAt)}
+                        </Text>
+                    ) : (
+                        <Text style={{ fontSize: 11, color: '#D32F2F', fontWeight: 'bold' }}>
+                            Running...
+                        </Text>
+                    )}
                 </View>
-            )}
-
-            {/* Manual Logging Form */}
-            <View style={[styles.manualLogCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-                <Text style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 8, color: theme.colors.onSurfaceVariant }}>
-                    Log Time Manually
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                    <TextInput
-                        mode="outlined"
-                        dense
-                        label="Hours"
-                        keyboardType="numeric"
-                        value={manualHours}
-                        onChangeText={setManualHours}
-                        style={{ flex: 1, backgroundColor: theme.colors.surface }}
-                    />
-                    <TextInput
-                        mode="outlined"
-                        dense
-                        label="Minutes"
-                        keyboardType="numeric"
-                        value={manualMinutes}
-                        onChangeText={setManualMinutes}
-                        style={{ flex: 1, backgroundColor: theme.colors.surface }}
-                    />
-                </View>
-                <TextInput
-                    mode="outlined"
-                    dense
-                    label="Log note (optional)"
-                    value={manualNote}
-                    onChangeText={setManualNote}
-                    style={{ marginBottom: 12, backgroundColor: theme.colors.surface }}
-                />
-                <Button
-                    mode="outlined"
-                    onPress={handleLogManualTime}
-                    loading={isLoggingManual}
-                    icon="clock-plus"
-                >
-                    Log Time
-                </Button>
+                {log.note ? (
+                    <Text style={{ fontSize: 12, fontStyle: 'italic', marginTop: 4, color: theme.colors.onSurfaceVariant }}>
+                        "{log.note}"
+                    </Text>
+                ) : null}
             </View>
+        ));
+    };
 
-            {/* Historical Logs List */}
-            <Text style={[styles.subSectionLabel, { marginTop: 16, marginBottom: 8 }]}>Log History</Text>
-            {logsLoading ? (
-                <ActivityIndicator style={{ marginVertical: 10 }} />
-            ) : timeLogs.length === 0 ? (
-                <Text style={styles.emptyText}>No time logged yet.</Text>
-            ) : (
-                timeLogs.map((log: TimeLog) => (
-                    <View key={log.id} style={[styles.logRow, { borderBottomColor: theme.colors.outlineVariant }]}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Text style={{ fontWeight: 'bold', fontSize: 13, color: theme.colors.onSurface }}>
-                                {log.user?.name || 'Someone'}
+    const renderTimeTrackingSection = () => {
+        return (
+            <>
+                <Text style={[styles.sectionTitleLabel, { color: theme.colors.onSurface, marginBottom: 12 }]}>Time Tracking</Text>
+
+                {/* Active Timer Banner / Live Stopwatch */}
+                {activeTimer ? (
+                    <View style={[styles.activeTimerBanner, { backgroundColor: '#E8F5E9' }]}>
+                        <IconButton icon="play-circle" iconColor="#4CAF50" size={28} style={{ margin: 0 }} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ color: '#2E7D32', fontWeight: 'bold' }}>
+                                Timer Running
                             </Text>
-                            <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 13 }}>
-                                {log.duration ? formatDuration(log.duration) : 'Active'}
-                            </Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
-                            <Text style={{ fontSize: 11, color: theme.colors.outline }}>
-                                {formatDate(log.startedAt)} · {formatTime(log.startedAt)}
-                            </Text>
-                            {log.endedAt ? (
-                                <Text style={{ fontSize: 11, color: theme.colors.outline }}>
-                                    to {formatTime(log.endedAt)}
+                            {activeTimer.note ? (
+                                <Text style={{ color: '#2E7D32', fontSize: 11 }} numberOfLines={1}>
+                                    "{activeTimer.note}"
                                 </Text>
-                            ) : (
-                                <Text style={{ fontSize: 11, color: '#D32F2F', fontWeight: 'bold' }}>
-                                    Running...
-                                </Text>
-                            )}
+                            ) : null}
                         </View>
-                        {log.note ? (
-                            <Text style={{ fontSize: 12, fontStyle: 'italic', marginTop: 4, color: theme.colors.onSurfaceVariant }}>
-                                "{log.note}"
-                            </Text>
-                        ) : null}
+                        <Text style={[styles.stopwatchText, { color: '#2E7D32' }]}>
+                            {formatDuration(elapsedSeconds)}
+                        </Text>
+                        <Button
+                            mode="contained"
+                            onPress={handleStopTimer}
+                            loading={isStoppingTimer}
+                            style={{ marginLeft: 10, backgroundColor: '#D32F2F' }}
+                            textColor="#fff"
+                        >
+                            Stop
+                        </Button>
                     </View>
-                ))
-            )}
+                ) : (
+                    <View style={styles.startTimerRow}>
+                        <TextInput
+                            mode="outlined"
+                            dense
+                            label="Timer note (optional)"
+                            placeholder="What are you working on?"
+                            value={timerNote}
+                            onChangeText={setTimerNote}
+                            style={{ flex: 1, height: 40, backgroundColor: theme.colors.surface }}
+                        />
+                        <Button
+                            mode="contained"
+                            onPress={handleStartTimer}
+                            loading={isStartingTimer}
+                            icon="play"
+                            style={{ marginLeft: 8, height: 40, justifyContent: 'center' }}
+                        >
+                            Start
+                        </Button>
+                    </View>
+                )}
+
+                {/* Manual Logging Form */}
+                <View style={[styles.manualLogCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 8, color: theme.colors.onSurfaceVariant }}>
+                        Log Time Manually
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                        <TextInput
+                            mode="outlined"
+                            dense
+                            label="Hours"
+                            keyboardType="numeric"
+                            value={manualHours}
+                            onChangeText={setManualHours}
+                            style={{ flex: 1, backgroundColor: theme.colors.surface }}
+                        />
+                        <TextInput
+                            mode="outlined"
+                            dense
+                            label="Minutes"
+                            keyboardType="numeric"
+                            value={manualMinutes}
+                            onChangeText={setManualMinutes}
+                            style={{ flex: 1, backgroundColor: theme.colors.surface }}
+                        />
+                    </View>
+                    <TextInput
+                        mode="outlined"
+                        dense
+                        label="Log note (optional)"
+                        value={manualNote}
+                        onChangeText={setManualNote}
+                        style={{ marginBottom: 12, backgroundColor: theme.colors.surface }}
+                    />
+                    <Button
+                        mode="outlined"
+                        onPress={handleLogManualTime}
+                        loading={isLoggingManual}
+                        icon="clock-plus"
+                    >
+                        Log Time
+                    </Button>
+                </View>
+
+                {/* Historical Logs List */}
+                <Text style={[styles.subSectionLabel, { marginTop: 16, marginBottom: 8 }]}>Log History</Text>
+                {renderLogHistory()}
+            </>
+        );
+    };
+
+    const renderDetails = () => (
+        <BottomSheetScrollView contentContainerStyle={styles.tabContent}>
+            {renderBlockedWarningBanner()}
+            {renderStatusAndPriorityRow()}
+            {renderDescriptionSection()}
+            {renderAISummarySection()}
+            {renderMetaInfoGrid()}
+
+            <Divider style={{ marginVertical: 16 }} />
+
+            {renderDependenciesSection()}
+
+            <Divider style={{ marginVertical: 16 }} />
+
+            {renderTimeTrackingSection()}
             {isAdmin && (
                 <>
                     <Divider style={{ marginVertical: 16 }} />
@@ -872,50 +929,58 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
 
     // ─── Comments Tab ─────────────────────────────────────────────────────────
 
+    const renderCommentsList = () => {
+        if (commentsLoading) {
+            return <ActivityIndicator style={{ marginTop: 30 }} />;
+        }
+        if (comments.length === 0) {
+            return (
+                <View style={styles.emptyTab}>
+                    <IconButton icon="chat-outline" size={42} iconColor={theme.colors.outline} />
+                    <Text style={{ color: theme.colors.outline }}>No comments yet. Be the first!</Text>
+                </View>
+            );
+        }
+        return (
+            <BottomSheetScrollView contentContainerStyle={styles.tabContent}>
+                {comments.map(c => (
+                    <View key={c.id} style={[styles.commentRow, { borderColor: theme.colors.outlineVariant }]}>
+                        <Avatar name={c.author?.name || '?'} size={34} />
+                        <View style={styles.commentBody}>
+                            <View style={styles.commentHeader}>
+                                <Text style={[styles.commentAuthor, { color: theme.colors.onSurface }]}>
+                                    {c.author?.name}
+                                </Text>
+                                <Text style={[styles.commentTime, { color: theme.colors.outline }]}>
+                                    {formatDate(c.createdAt)} · {formatTime(c.createdAt)}
+                                </Text>
+                            </View>
+                            <Text style={[styles.commentContent, { color: theme.colors.onSurfaceVariant }]}>
+                                {c.content}
+                            </Text>
+                        </View>
+                        {c.userId === user?.id && (
+                            <IconButton
+                                icon="delete-outline"
+                                size={18}
+                                iconColor={theme.colors.error}
+                                onPress={() => handleDeleteComment(c.id)}
+                                style={{ margin: 0, alignSelf: 'flex-start' }}
+                            />
+                        )}
+                    </View>
+                ))}
+            </BottomSheetScrollView>
+        );
+    };
+
     const renderComments = () => (
         <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={120}
         >
-            {commentsLoading ? (
-                <ActivityIndicator style={{ marginTop: 30 }} />
-            ) : comments.length === 0 ? (
-                <View style={styles.emptyTab}>
-                    <IconButton icon="chat-outline" size={42} iconColor={theme.colors.outline} />
-                    <Text style={{ color: theme.colors.outline }}>No comments yet. Be the first!</Text>
-                </View>
-            ) : (
-                <BottomSheetScrollView contentContainerStyle={styles.tabContent}>
-                    {comments.map(c => (
-                        <View key={c.id} style={[styles.commentRow, { borderColor: theme.colors.outlineVariant }]}>
-                            <Avatar name={c.author?.name || '?'} size={34} />
-                            <View style={styles.commentBody}>
-                                <View style={styles.commentHeader}>
-                                    <Text style={[styles.commentAuthor, { color: theme.colors.onSurface }]}>
-                                        {c.author?.name}
-                                    </Text>
-                                    <Text style={[styles.commentTime, { color: theme.colors.outline }]}>
-                                        {formatDate(c.createdAt)} · {formatTime(c.createdAt)}
-                                    </Text>
-                                </View>
-                                <Text style={[styles.commentContent, { color: theme.colors.onSurfaceVariant }]}>
-                                    {c.content}
-                                </Text>
-                            </View>
-                            {c.userId === user?.id && (
-                                <IconButton
-                                    icon="delete-outline"
-                                    size={18}
-                                    iconColor={theme.colors.error}
-                                    onPress={() => handleDeleteComment(c.id)}
-                                    style={{ margin: 0, alignSelf: 'flex-start' }}
-                                />
-                            )}
-                        </View>
-                    ))}
-                </BottomSheetScrollView>
-            )}
+            {renderCommentsList()}
 
             {/* Comment Input */}
             <View style={[styles.commentInputRow, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.outlineVariant }]}>
@@ -947,15 +1012,19 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
 
     // ─── Activity Tab ─────────────────────────────────────────────────────────
 
-    const renderActivity = () => (
-        activityLoading ? (
-            <ActivityIndicator style={{ marginTop: 30 }} />
-        ) : activity.length === 0 ? (
-            <View style={styles.emptyTab}>
-                <IconButton icon="history" size={42} iconColor={theme.colors.outline} />
-                <Text style={{ color: theme.colors.outline }}>No activity yet.</Text>
-            </View>
-        ) : (
+    const renderActivity = () => {
+        if (activityLoading) {
+            return <ActivityIndicator style={{ marginTop: 30 }} />;
+        }
+        if (activity.length === 0) {
+            return (
+                <View style={styles.emptyTab}>
+                    <IconButton icon="history" size={42} iconColor={theme.colors.outline} />
+                    <Text style={{ color: theme.colors.outline }}>No activity yet.</Text>
+                </View>
+            );
+        }
+        return (
             <BottomSheetScrollView contentContainerStyle={styles.tabContent}>
                 {activity.map((entry, idx) => (
                     <View key={entry.id} style={styles.activityRow}>
@@ -980,8 +1049,8 @@ const TaskDetailSheet: React.FC<TaskDetailSheetProps> = ({
                     </View>
                 ))}
             </BottomSheetScrollView>
-        )
-    );
+        );
+    };
 
     // ─── Render ───────────────────────────────────────────────────────────────
 

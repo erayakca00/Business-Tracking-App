@@ -2,11 +2,9 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Card, Button, TextInput, Portal, Modal, ActivityIndicator, Avatar, Switch, useTheme } from 'react-native-paper';
 import { useGetProfileQuery, useUpdateProfileMutation, useChangePasswordMutation } from '../services/usersApi';
-import { useDispatch } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
 import { toggleTheme } from '../features/theme/themeSlice';
-import { useNavigation } from '@react-navigation/native';
 
 const ProfileScreen = () => {
     const theme = useTheme();
@@ -14,7 +12,6 @@ const ProfileScreen = () => {
     const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
     const [changePassword, { isLoading: isChangingPassword }] = useChangePasswordMutation();
     const dispatch = useAppDispatch();
-    const navigation = useNavigation();
     const themeMode = useAppSelector((state) => state.theme.mode);
     const isDarkMode = themeMode === 'dark';
 
@@ -71,8 +68,8 @@ const ProfileScreen = () => {
         return <ActivityIndicator animating={true} style={styles.loader} />;
     }
 
-    const getInitials = (name: string) => {
-        return name
+    const getInitials = (fullName: string) => {
+        return fullName
             .split(' ')
             .map(n => n[0])
             .join('')

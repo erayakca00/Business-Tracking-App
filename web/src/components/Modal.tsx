@@ -34,9 +34,12 @@ const Modal = ({ isOpen, onClose, title, children }: ModalProps) => {
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                    <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
-                </div>
+                <button
+                    type="button"
+                    className="absolute inset-0 w-full h-full bg-gray-500 opacity-75 cursor-default border-none p-0 focus:outline-none"
+                    onClick={onClose}
+                    aria-label="Close modal"
+                />
 
                 <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 

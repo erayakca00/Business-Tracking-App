@@ -262,62 +262,97 @@ export class TasksService {
    * @param updateTaskDto Partial payload of allowed updatable fields.
    * @param user The authenticated user attempting the edit.
    */
-  async update(
-    id: string,
-    updateTaskDto: UpdateTaskDto,
-    user: User,
-  ): Promise<Task> {
-    const task = await this.findOne(id, user); // Checks access
-
-    // If attempting to change group or assignee, should re-validate?
-    // For now, simpler update. UpdateTaskDto doesn't allow changing group.
-
-    // Check user role
+  private async validateUpdatePermission(task: Task, user: User) {
     const userGroup = await this.userGroupRepository.findOne({
       where: { userId: user.id, groupId: task.group.id },
     });
-    const isAdmin = userGroup && userGroup.role === UserRole.ADMIN;
-    const isAssignee = task.assignedTo && task.assignedTo.id === user.id;
-    const isCreator = task.createdBy && task.createdBy.id === user.id;
+    const isAdmin = userGroup?.role === UserRole.ADMIN;
+    const isAssignee = task.assignedTo?.id === user.id;
+    const isCreator = task.createdBy?.id === user.id;
 
     if (!isAdmin && !isAssignee && !isCreator) {
       throw new ForbiddenException(
         'You can only edit tasks you created or are assigned to',
       );
     }
+    return { isAdmin, isCreator };
+  }
 
-    if (updateTaskDto.assignedToId !== undefined) {
-      if (!isAdmin && !isCreator) {
-        throw new ForbiddenException(
-          'Only group admins or task creators can assign tasks',
-        );
-      }
+  private async handleAssignmentUpdate(
+    task: Task,
+    updateTaskDto: UpdateTaskDto,
+    user: User,
+    isAdmin: boolean,
+    isCreator: boolean,
+  ) {
+    if (updateTaskDto.assignedToId === undefined) return;
 
-      if (updateTaskDto.assignedToId === null) {
-        task.assignedTo = null as any;
-      } else {
-        // defined check if assignee is in group
-        const assigneeGroup = await this.userGroupRepository.findOne({
-          where: { userId: updateTaskDto.assignedToId, groupId: task.group.id },
-        });
-        if (!assigneeGroup) {
-          throw new BadRequestException(
-            'Assignee is not a member of this group',
-          );
-        }
-        task.assignedTo = { id: updateTaskDto.assignedToId } as User;
-
-        // Notify the new assignee
-        await this.notificationsService.createNotification({
-          userId: updateTaskDto.assignedToId,
-          actorId: user.id,
-          type: 'task_assigned',
-          message: `You have been assigned to task: "${task.title}"`,
-          taskId: task.id,
-        });
-      }
+    if (!isAdmin && !isCreator) {
+      throw new ForbiddenException(
+        'Only group admins or task creators can assign tasks',
+      );
     }
 
+    if (updateTaskDto.assignedToId === null) {
+      task.assignedTo = null as any;
+    } else {
+      const assigneeGroup = await this.userGroupRepository.findOne({
+        where: { userId: updateTaskDto.assignedToId, groupId: task.group.id },
+      });
+      if (!assigneeGroup) {
+        throw new BadRequestException('Assignee is not a member of this group');
+      }
+      task.assignedTo = { id: updateTaskDto.assignedToId } as User;
+
+      await this.notificationsService.createNotification({
+        userId: updateTaskDto.assignedToId,
+        actorId: user.id,
+        type: 'task_assigned',
+        message: `You have been assigned to task: "${task.title}"`,
+        taskId: task.id,
+      });
+    }
+  }
+
+  private async handleStatusUpdate(
+    task: Task,
+    updateTaskDto: UpdateTaskDto,
+    user: User,
+  ) {
+    if (!updateTaskDto.status || updateTaskDto.status === task.status) return;
+
+    // Block transitions to active states if unresolved blocking dependencies exist
+    if (
+      updateTaskDto.status !== TaskStatus.TODO &&
+      updateTaskDto.status !== TaskStatus.BLOCKED
+    ) {
+      const activeBlockers =
+        task.blockedBy?.filter((t) => t.status !== TaskStatus.DONE) || [];
+      if (activeBlockers.length > 0) {
+        throw new BadRequestException(
+          `Task is blocked by unresolved tasks: ${activeBlockers
+            .map((b) => b.title)
+            .join(', ')}`,
+        );
+      }
+    }
+    await this.logActivity(task.id, user.id, 'status_changed', {
+      from: task.status,
+      to: updateTaskDto.status,
+    });
+    task.status = updateTaskDto.status;
+    if (task.status === TaskStatus.DONE) {
+      task.completedAt = new Date();
+    } else {
+      task.completedAt = null as any;
+    }
+  }
+
+  private async handleBasicUpdates(
+    task: Task,
+    updateTaskDto: UpdateTaskDto,
+    user: User,
+  ) {
     if (updateTaskDto.title && updateTaskDto.title !== task.title) {
       await this.logActivity(task.id, user.id, 'title_changed', {
         from: task.title,
@@ -331,31 +366,6 @@ export class TasksService {
     ) {
       await this.logActivity(task.id, user.id, 'description_changed');
       task.description = updateTaskDto.description;
-    }
-    if (updateTaskDto.status && updateTaskDto.status !== task.status) {
-      // Block transitions to anything other than todo or blocked if active blockers exist
-      if (
-        updateTaskDto.status !== TaskStatus.TODO &&
-        updateTaskDto.status !== TaskStatus.BLOCKED
-      ) {
-        const activeBlockers =
-          task.blockedBy?.filter((t) => t.status !== TaskStatus.DONE) || [];
-        if (activeBlockers.length > 0) {
-          throw new BadRequestException(
-            `Task is blocked by unresolved tasks: ${activeBlockers.map((b) => b.title).join(', ')}`,
-          );
-        }
-      }
-      await this.logActivity(task.id, user.id, 'status_changed', {
-        from: task.status,
-        to: updateTaskDto.status,
-      });
-      task.status = updateTaskDto.status;
-      if (task.status === TaskStatus.DONE) {
-        task.completedAt = new Date();
-      } else {
-        task.completedAt = null as any;
-      }
     }
     if (updateTaskDto.priority && updateTaskDto.priority !== task.priority) {
       await this.logActivity(task.id, user.id, 'priority_changed', {
@@ -373,6 +383,13 @@ export class TasksService {
       });
       task.dueDate = updateTaskDto.dueDate;
     }
+  }
+
+  private async handleAdvancedUpdates(
+    task: Task,
+    updateTaskDto: UpdateTaskDto,
+    user: User,
+  ) {
     if (
       updateTaskDto.projectTag !== undefined &&
       updateTaskDto.projectTag !== task.projectTag
@@ -393,20 +410,50 @@ export class TasksService {
       });
       task.effort = updateTaskDto.effort;
     }
-
     if (
       updateTaskDto.sprintId !== undefined &&
       updateTaskDto.sprintId !== task.sprintId
     ) {
       task.sprintId = updateTaskDto.sprintId;
     }
-
     if (
       updateTaskDto.dependsOnId !== undefined &&
       updateTaskDto.dependsOnId !== task.dependsOnId
     ) {
       task.dependsOnId = updateTaskDto.dependsOnId;
     }
+  }
+
+  private async handleMetadataUpdates(
+    task: Task,
+    updateTaskDto: UpdateTaskDto,
+    user: User,
+  ) {
+    await this.handleBasicUpdates(task, updateTaskDto, user);
+    await this.handleAdvancedUpdates(task, updateTaskDto, user);
+  }
+
+  async update(
+    id: string,
+    updateTaskDto: UpdateTaskDto,
+    user: User,
+  ): Promise<Task> {
+    const task = await this.findOne(id, user); // Checks access
+
+    const { isAdmin, isCreator } = await this.validateUpdatePermission(
+      task,
+      user,
+    );
+
+    await this.handleAssignmentUpdate(
+      task,
+      updateTaskDto,
+      user,
+      isAdmin,
+      isCreator,
+    );
+    await this.handleStatusUpdate(task, updateTaskDto, user);
+    await this.handleMetadataUpdates(task, updateTaskDto, user);
 
     // Invalidate AI Summary cache on task update
     task.aiSummary = null;
@@ -444,13 +491,13 @@ export class TasksService {
   async remove(id: string, user: User): Promise<void> {
     const task = await this.findOne(id, user);
 
-    const isCreator = task.createdBy && task.createdBy.id === user.id;
+    const isCreator = task.createdBy?.id === user.id;
 
     // Check if user is admin of the group
     const userGroup = await this.userGroupRepository.findOne({
       where: { userId: user.id, groupId: task.group.id },
     });
-    const isAdmin = userGroup && userGroup.role === UserRole.ADMIN;
+    const isAdmin = userGroup?.role === UserRole.ADMIN;
 
     if (!isCreator && !isAdmin) {
       throw new ForbiddenException('Only group admins can delete tasks');
@@ -467,6 +514,59 @@ export class TasksService {
     }
   }
 
+  private async bulkUpdateSingleTask(
+    id: string,
+    status: TaskStatus,
+    user: User,
+  ): Promise<void> {
+    const task = await this.findOne(id, user);
+    const userGroup = await this.userGroupRepository.findOne({
+      where: { userId: user.id, groupId: task.group.id },
+    });
+    const isAdmin = userGroup?.role === UserRole.ADMIN;
+    const isAssignee = task.assignedTo?.id === user.id;
+    const isCreator = task.createdBy?.id === user.id;
+
+    if (!isAdmin && !isAssignee && !isCreator) {
+      return; // Skip if no permission
+    }
+
+    if (task.status !== status) {
+      await this.logActivity(task.id, user.id, 'status_changed', {
+        from: task.status,
+        to: status,
+      });
+      task.status = status;
+      if (status === TaskStatus.DONE) {
+        task.completedAt = new Date();
+      } else {
+        task.completedAt = null as any;
+      }
+      task.aiSummary = null;
+      task.aiSummaryUpdatedAt = null;
+      const saved = await this.taskRepository.save(task);
+
+      // Broadcast task update via WebSockets
+      try {
+        const fullTask = await this.taskRepository.findOne({
+          where: { id: saved.id },
+          relations: ['group', 'assignedTo', 'createdBy'],
+        });
+        if (fullTask) {
+          this.eventsGateway.broadcastTaskUpdated(
+            task.group.id.toString(),
+            fullTask,
+          );
+        }
+      } catch (wsErr) {
+        console.error(
+          '[WebSockets] Failed to broadcast bulk task update:',
+          wsErr,
+        );
+      }
+    }
+  }
+
   async bulkUpdateStatus(
     taskIds: string[],
     status: TaskStatus,
@@ -475,54 +575,7 @@ export class TasksService {
     // Iterate and update individually to ensure permissions and activity logging are applied
     for (const id of taskIds) {
       try {
-        // If it throws (e.g. 404 or 403), we can choose to skip or fail the whole thing.
-        // It's better to skip and try updating the rest than to fail all.
-        const task = await this.findOne(id, user);
-        const userGroup = await this.userGroupRepository.findOne({
-          where: { userId: user.id, groupId: task.group.id },
-        });
-        const isAdmin = userGroup && userGroup.role === UserRole.ADMIN;
-        const isAssignee = task.assignedTo && task.assignedTo.id === user.id;
-        const isCreator = task.createdBy && task.createdBy.id === user.id;
-
-        if (!isAdmin && !isAssignee && !isCreator) {
-          continue; // Skip if no permission
-        }
-
-        if (task.status !== status) {
-          await this.logActivity(task.id, user.id, 'status_changed', {
-            from: task.status,
-            to: status,
-          });
-          task.status = status;
-          if (status === TaskStatus.DONE) {
-            task.completedAt = new Date();
-          } else {
-            task.completedAt = null as any;
-          }
-          task.aiSummary = null;
-          task.aiSummaryUpdatedAt = null;
-          const saved = await this.taskRepository.save(task);
-
-          // Broadcast task update via WebSockets
-          try {
-            const fullTask = await this.taskRepository.findOne({
-              where: { id: saved.id },
-              relations: ['group', 'assignedTo', 'createdBy'],
-            });
-            if (fullTask) {
-              this.eventsGateway.broadcastTaskUpdated(
-                task.group.id.toString(),
-                fullTask,
-              );
-            }
-          } catch (wsErr) {
-            console.error(
-              '[WebSockets] Failed to broadcast bulk task update:',
-              wsErr,
-            );
-          }
-        }
+        await this.bulkUpdateSingleTask(id, status, user);
       } catch (e) {
         // Skip not found tasks or tasks without access
         console.error(`Failed to update task ${id}:`, e);
@@ -547,13 +600,26 @@ export class TasksService {
     if (
       task.aiSummary &&
       task.aiSummaryUpdatedAt &&
-      new Date().getTime() - new Date(task.aiSummaryUpdatedAt).getTime() < CACHE_TTL_MS
+      Date.now() - new Date(task.aiSummaryUpdatedAt).getTime() < CACHE_TTL_MS
     ) {
       return task;
     }
 
     const comments = await this.commentsService.findByTask(taskId);
     const activities = await this.getActivity(taskId);
+
+    const activitiesStr = activities
+      .map(
+        (a: any) =>
+          `- ${a.actor?.name || 'System'}: ${a.type}${
+            a.data ? ' (' + JSON.stringify(a.data) + ')' : ''
+          }`,
+      )
+      .join('\n');
+
+    const commentsStr = comments
+      .map((c: any) => `- ${c.author?.name || 'User'}: ${c.content}`)
+      .join('\n');
 
     const prompt = `You are a helpful project manager assistant. Summarize the following task's progress, activities, and discussion in exactly 3 sentences. Do not use any markdown bolding, lists, or headers. Only return a plain text paragraph with exactly 3 sentences.
 
@@ -565,10 +631,10 @@ Status: ${task.status}
 Assignee: ${task.assignedTo?.name || 'Unassigned'}
 
 Recent Activities:
-${activities.map((a: any) => `- ${a.actor?.name || 'System'}: ${a.type}${a.data ? ' (' + JSON.stringify(a.data) + ')' : ''}`).join('\n')}
+${activitiesStr}
 
 Comments:
-${comments.map((c: any) => `- ${c.author?.name || 'User'}: ${c.content}`).join('\n')}`;
+${commentsStr}`;
 
     const summary = await this.aiService.generateSummary(prompt);
     task.aiSummary = summary.trim();
@@ -588,7 +654,7 @@ ${comments.map((c: any) => `- ${c.author?.name || 'User'}: ${c.content}`).join('
       relations: ['blocking'],
     });
 
-    if (!task || !task.blocking || task.blocking.length === 0) {
+    if (!task?.blocking || task.blocking.length === 0) {
       return false;
     }
 

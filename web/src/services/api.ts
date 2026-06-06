@@ -22,10 +22,10 @@ api.interceptors.response.use(
     (error) => {
         if (error.response && (error.response.status === 401 || error.response.status === 403)) {
             // Prevent redirect loop if already on login or register
-            if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+            if (globalThis.location.pathname !== '/login' && globalThis.location.pathname !== '/register') {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
-                window.location.href = '/login';
+                globalThis.location.href = '/login';
             }
         }
         return Promise.reject(error);

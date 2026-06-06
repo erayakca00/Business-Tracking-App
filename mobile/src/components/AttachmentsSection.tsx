@@ -6,22 +6,19 @@ import {
     Alert,
     Linking,
     ActivityIndicator,
-    Platform,
 } from 'react-native';
 import { Text, IconButton, useTheme, Divider } from 'react-native-paper';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import { pick, isCancel } from '@react-native-documents/picker';
-import { useSelector } from 'react-redux';
+import { pick, isErrorWithCode, errorCodes, keepLocalCopy } from '@react-native-documents/picker';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../app/store';
-import { BASE_URL } from '../services/api';
+import { BASE_URL, api } from '../services/api';
 import {
     useGetAttachmentsQuery,
     useDeleteAttachmentMutation,
     uploadAttachment,
     Attachment,
 } from '../services/attachmentsApi';
-import { useDispatch } from 'react-redux';
-import { api } from '../services/api';
 import Toast from 'react-native-toast-message';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -68,7 +65,6 @@ interface AttachmentRowProps {
 const AttachmentRow = ({ item, currentUserId, onDelete, baseUrl }: AttachmentRowProps) => {
     const theme = useTheme();
     const isOwner = item.userId === currentUserId;
-    const isImage = item.mimeType.startsWith('image/');
 
     const handleOpen = () => {
         // Strip /api/v1 from BASE_URL if present to get the server root
@@ -239,17 +235,29 @@ const AttachmentsSection: React.FC<AttachmentsSectionProps> = ({ taskId, current
                     try {
                         const [result] = await pick({
                             type: ['*/*'],
-                            copyTo: 'cachesDirectory',
                         });
                         if (result) {
+                            let localUri = result.uri;
+                            try {
+                                const copyResult = await keepLocalCopy({
+                                    files: [{ uri: result.uri, fileName: result.name || 'file' }],
+                                    destination: 'cachesDirectory',
+                                });
+                                if (copyResult[0]?.status === 'success') {
+                                    localUri = copyResult[0].localUri;
+                                }
+                            } catch (copyError) {
+                                console.warn('Failed to make a local copy, falling back to original uri', copyError);
+                            }
                             doUpload({
-                                uri: result.fileCopyUri || result.uri,
+                                uri: localUri,
                                 name: result.name || 'file',
                                 type: result.type || 'application/octet-stream',
                             });
                         }
                     } catch (e) {
-                        if (!isCancel(e)) {
+                        const isCancel = isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED;
+                        if (!isCancel) {
                             Toast.show({ type: 'error', text1: 'Could not open file picker' });
                         }
                     }
@@ -257,6 +265,35 @@ const AttachmentsSection: React.FC<AttachmentsSectionProps> = ({ taskId, current
             },
             { text: 'Cancel', style: 'cancel' },
         ]);
+    };
+
+    const renderContent = () => {
+        if (isLoading) {
+            return <ActivityIndicator size="small" style={{ marginVertical: 16 }} />;
+        }
+        if (attachments.length === 0) {
+            return (
+                <View style={styles.emptyState}>
+                    <IconButton icon="paperclip" size={32} iconColor={theme.colors.outline} />
+                    <Text style={[styles.emptyText, { color: theme.colors.outline }]}>
+                        No attachments yet.{'\n'}Tap "Attach File" to add one.
+                    </Text>
+                </View>
+            );
+        }
+        return (
+            <View style={styles.attachList}>
+                {attachments.map((item) => (
+                    <AttachmentRow
+                        key={item.id}
+                        item={item}
+                        currentUserId={currentUserId}
+                        onDelete={handleDelete}
+                        baseUrl={BASE_URL}
+                    />
+                ))}
+            </View>
+        );
     };
 
     return (
@@ -271,28 +308,7 @@ const AttachmentsSection: React.FC<AttachmentsSectionProps> = ({ taskId, current
 
             <Divider style={{ marginBottom: 12, opacity: 0.4 }} />
 
-            {isLoading ? (
-                <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
-            ) : attachments.length === 0 ? (
-                <View style={styles.emptyState}>
-                    <IconButton icon="paperclip" size={32} iconColor={theme.colors.outline} />
-                    <Text style={[styles.emptyText, { color: theme.colors.outline }]}>
-                        No attachments yet.{'\n'}Tap "Attach File" to add one.
-                    </Text>
-                </View>
-            ) : (
-                <View style={styles.attachList}>
-                    {attachments.map((item) => (
-                        <AttachmentRow
-                            key={item.id}
-                            item={item}
-                            currentUserId={currentUserId}
-                            onDelete={handleDelete}
-                            baseUrl={BASE_URL}
-                        />
-                    ))}
-                </View>
-            )}
+            {renderContent()}
         </View>
     );
 };

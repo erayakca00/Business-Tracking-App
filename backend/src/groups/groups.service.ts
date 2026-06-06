@@ -7,12 +7,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Group } from '../database/entities/group.entity';
-import { UserGroup } from '../database/entities/user-group.entity';
+import { UserGroup, UserRole } from '../database/entities/user-group.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { User } from '../database/entities/user.entity';
 import { UsersService } from '../users/users.service';
-import { UserRole } from '../database/entities/user-group.entity';
 import { Task } from '../database/entities/task.entity';
 import { TimeLog } from '../database/entities/time-log.entity';
 import { SprintsService } from '../sprints/sprints.service';
@@ -91,7 +90,7 @@ export class GroupsService {
       where: { userId: user.id, groupId: id },
     });
 
-    if (!userGroup || userGroup.role !== UserRole.ADMIN) {
+    if (userGroup?.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Only admins can update the group');
     }
 

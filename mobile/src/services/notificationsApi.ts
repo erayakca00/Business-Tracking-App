@@ -4,7 +4,7 @@ export interface Notification {
     id: string;
     userId: string;
     actorId: string;
-    type: 'task_assigned' | 'mention' | string;
+    type: 'task_assigned' | 'mention' | (string & {});
     message: string;
     taskId?: string;
     isRead: boolean;

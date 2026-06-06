@@ -42,7 +42,7 @@ const GroupSettingsModal = ({ isOpen, onClose, groupId, members, isAdmin, isOwne
     };
 
     const handleDeleteTemplate = async (templateId: string) => {
-        if (!window.confirm('Are you sure you want to delete this template?')) return;
+        if (!globalThis.confirm('Are you sure you want to delete this template?')) return;
         try {
             await api.delete(`/templates/${templateId}`);
             fetchTemplates();
@@ -78,7 +78,7 @@ const GroupSettingsModal = ({ isOpen, onClose, groupId, members, isAdmin, isOwne
     };
 
     const handleRemoveMember = async (userId: string) => {
-        if (!window.confirm('Are you sure you want to remove this member?')) return;
+        if (!globalThis.confirm('Are you sure you want to remove this member?')) return;
         try {
             await api.delete(`/groups/${groupId}/users/${userId}`);
             onSettingsChanged();
@@ -92,7 +92,7 @@ const GroupSettingsModal = ({ isOpen, onClose, groupId, members, isAdmin, isOwne
     };
 
     const handleRevokeInvitation = async (id: string) => {
-        if (!window.confirm('Are you sure you want to revoke this invitation?')) return;
+        if (!globalThis.confirm('Are you sure you want to revoke this invitation?')) return;
         try {
             await api.delete(`/groups/${groupId}/invitations/${id}`);
             fetchInvitations();

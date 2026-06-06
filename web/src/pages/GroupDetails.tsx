@@ -9,7 +9,6 @@ import SprintBanner from '../components/SprintBanner';
 import { useAuth } from '../context/AuthContext';
 import TaskBoard from '../components/TaskBoard';
 import TaskList from '../components/TaskList';
-import NotificationBell from '../components/NotificationBell';
 import { useSocket } from '../hooks/useSocket';
 
 /**
@@ -22,6 +21,57 @@ import { useSocket } from '../hooks/useSocket';
  * - Manages view toggle between 'TaskBoard' (Kanban) and 'TaskList' (Data Grid).
  * - Centralizes CRUD operations for tasks safely, passing them down as props to the presentational components.
  */
+const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const statusOrder: Record<string, number> = { todo: 0, in_progress: 1, review: 2, done: 3, blocked: 4 };
+
+function getFilteredAndSortedTasks(
+    tasks: any[],
+    sprintFilter: 'active' | 'backlog' | 'all',
+    activeSprint: any,
+    tagFilter: string | null,
+    searchQuery: string,
+    sortBy: string,
+    sortDir: 'asc' | 'desc'
+) {
+    let base = [...tasks];
+
+    if (sprintFilter === 'active') {
+        if (activeSprint) {
+            base = base.filter((t: any) => t.sprintId === activeSprint.id);
+        } else {
+            base = [];
+        }
+    } else if (sprintFilter === 'backlog') {
+        base = base.filter((t: any) => t.sprintId === null);
+    }
+
+    if (tagFilter) {
+        base = base.filter((t: any) => t.projectTag === tagFilter);
+    }
+
+    if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        base = base.filter((t: any) =>
+            t.title.toLowerCase().includes(query) ||
+            t.description?.toLowerCase().includes(query)
+        );
+    }
+
+    return [...base].sort((a: any, b: any) => {
+        let cmp = 0;
+        if (sortBy === 'title') cmp = (a.title || '').localeCompare(b.title || '');
+        else if (sortBy === 'tag') cmp = (a.projectTag || '').localeCompare(b.projectTag || '');
+        else if (sortBy === 'priority') cmp = (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
+        else if (sortBy === 'status') cmp = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+        else {
+            const da = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
+            const db = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
+            cmp = da - db;
+        }
+        return sortDir === 'asc' ? cmp : -cmp;
+    });
+}
+
 const GroupDetails = () => {
     const { groupId } = useParams<{ groupId: string }>();
     const navigate = useNavigate();
@@ -36,34 +86,34 @@ const GroupDetails = () => {
 
     const { socket, connected } = useSocket(groupId);
 
+    const handleTaskCreatedSocket = (newTask: any) => {
+        setTasks((prev: any[]) => {
+            if (prev.some(t => t.id === newTask.id)) return prev;
+            return [newTask, ...prev];
+        });
+    };
+
+    const handleTaskUpdatedSocket = (updatedTask: any) => {
+        setTasks((prev: any[]) => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+        setSelectedTask((prev: any) => prev?.id === updatedTask.id ? updatedTask : prev);
+    };
+
+    const handleTaskDeletedSocket = (data: { taskId: string }) => {
+        setTasks((prev: any[]) => prev.filter(t => t.id !== data.taskId));
+        setSelectedTask((prev: any) => prev?.id === data.taskId ? null : prev);
+    };
+
     useEffect(() => {
         if (!socket) return;
 
-        const handleTaskCreated = (newTask: any) => {
-            setTasks((prev: any[]) => {
-                if (prev.some(t => t.id === newTask.id)) return prev;
-                return [newTask, ...prev];
-            });
-        };
-
-        const handleTaskUpdated = (updatedTask: any) => {
-            setTasks((prev: any[]) => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-            setSelectedTask((prev: any) => prev && prev.id === updatedTask.id ? updatedTask : prev);
-        };
-
-        const handleTaskDeleted = (data: { taskId: string }) => {
-            setTasks((prev: any[]) => prev.filter(t => t.id !== data.taskId));
-            setSelectedTask((prev: any) => prev && prev.id === data.taskId ? null : prev);
-        };
-
-        socket.on('task:created', handleTaskCreated);
-        socket.on('task:updated', handleTaskUpdated);
-        socket.on('task:deleted', handleTaskDeleted);
+        socket.on('task:created', handleTaskCreatedSocket);
+        socket.on('task:updated', handleTaskUpdatedSocket);
+        socket.on('task:deleted', handleTaskDeletedSocket);
 
         return () => {
-            socket.off('task:created', handleTaskCreated);
-            socket.off('task:updated', handleTaskUpdated);
-            socket.off('task:deleted', handleTaskDeleted);
+            socket.off('task:created', handleTaskCreatedSocket);
+            socket.off('task:updated', handleTaskUpdatedSocket);
+            socket.off('task:deleted', handleTaskDeletedSocket);
         };
     }, [socket]);
 
@@ -120,7 +170,7 @@ const GroupDetails = () => {
     useEffect(() => {
         if (queryTaskId && tasks.length > 0) {
             const t = tasks.find((task: any) => task.id === queryTaskId);
-            if (t && (!selectedTask || t.id !== (selectedTask as any).id)) {
+            if (t && (!selectedTask || t.id !== selectedTask.id)) {
                 setSelectedTask(t);
 
                 // Clear the parameter so closing the modal doesn't immediately reopen it
@@ -142,7 +192,7 @@ const GroupDetails = () => {
     };
 
     const handleDeleteTask = async (taskId: string) => {
-        if (!window.confirm('Are you sure you want to delete this task?')) return;
+        if (!globalThis.confirm('Are you sure you want to delete this task?')) return;
         try {
             await api.delete(`/tasks/${taskId}`);
             fetchData();
@@ -151,12 +201,8 @@ const GroupDetails = () => {
         }
     };
 
-
-
-
-
     const handleDeleteGroup = async () => {
-        if (!window.confirm('Are you absolutely sure you want to close and permanently delete this group? All tasks, attachments, and comments will be lost. This cannot be undone.')) return;
+        if (!globalThis.confirm('Are you absolutely sure you want to close and permanently delete this group? All tasks, attachments, and comments will be lost. This cannot be undone.')) return;
         try {
             await api.delete(`/groups/${groupId}`);
             navigate('/dashboard');
@@ -166,62 +212,50 @@ const GroupDetails = () => {
         }
     };
 
+    const handleStatusChange = async (taskId: string, status: string) => {
+        try {
+            setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+            await api.patch(`/tasks/${taskId}`, { status });
+            fetchData();
+        } catch (error) {
+            console.error('Failed to update status', error);
+        }
+    };
+
+    const handleBulkStatusChange = async (taskIds: string[], status: string) => {
+        try {
+            await api.patch(`/tasks/bulk/status`, { taskIds, status });
+            fetchData();
+        } catch (error) {
+            console.error('Failed to bulk update status', error);
+        }
+    };
+
+    const handleBulkDelete = async (taskIds: string[]) => {
+        try {
+            await api.post(`/tasks/bulk/delete`, { taskIds });
+            fetchData();
+        } catch (error) {
+            console.error('Failed to bulk delete tasks', error);
+        }
+    };
+
     const isOwner = group?.owner?.id === user?.id;
     const currentUserRole = members.find((m: any) => m.userId === user?.id)?.role;
     const isAdmin = currentUserRole === 'admin' || isOwner;
-
-    const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
-    const statusOrder: Record<string, number> = { todo: 0, in_progress: 1, review: 2, done: 3, blocked: 4 };
 
     const activeSprint = useMemo(() => sprints.find(s => s.status === 'active'), [sprints]);
     const completedSprintIds = useMemo(() => new Set(sprints.filter(s => s.status === 'completed').map(s => s.id)), [sprints]);
 
     const filteredTasks = useMemo(() => {
-        let base = [...tasks];
+        return getFilteredAndSortedTasks(tasks, sprintFilter, activeSprint, tagFilter, searchQuery, sortBy, sortDir);
+    }, [tasks, tagFilter, searchQuery, sortBy, sortDir, sprintFilter, activeSprint]);
 
-        if (sprintFilter === 'active') {
-            if (activeSprint) {
-                base = base.filter((t: any) => t.sprintId === activeSprint.id);
-            } else {
-                base = [];
-            }
-        } else if (sprintFilter === 'backlog') {
-            base = base.filter((t: any) => t.sprintId === null);
-        }
-        // If sprintFilter === 'all', base retains all tasks including completed sprint tasks.
-
-        if (tagFilter) {
-            base = base.filter((t: any) => t.projectTag === tagFilter);
-        }
-
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
-            base = base.filter((t: any) =>
-                t.title.toLowerCase().includes(query) ||
-                (t.description && t.description.toLowerCase().includes(query))
-            );
-        }
-
-        return [...base].sort((a: any, b: any) => {
-            let cmp = 0;
-            if (sortBy === 'title') cmp = (a.title || '').localeCompare(b.title || '');
-            else if (sortBy === 'tag') cmp = (a.projectTag || '').localeCompare(b.projectTag || '');
-            else if (sortBy === 'priority') cmp = (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
-            else if (sortBy === 'status') cmp = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
-            else {
-                const da = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
-                const db = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
-                cmp = da - db;
-            }
-            return sortDir === 'asc' ? cmp : -cmp;
-        });
-    }, [tasks, tagFilter, searchQuery, sortBy, sortDir, sprintFilter, activeSprint, completedSprintIds]);
-
-    // Tags scoped to the currently visible tasks (sprint-aware)
-    const uniqueTags = useMemo(() =>
-        Array.from(new Set(filteredTasks.map((t: any) => t.projectTag).filter(Boolean))).sort() as string[],
-        [filteredTasks]
-    );
+    // Tags scoped to the current sprint/backlog context (sprint-aware but not tag/search filtered)
+    const uniqueTags = useMemo(() => {
+        const baseTasks = getFilteredAndSortedTasks(tasks, sprintFilter, activeSprint, null, '', 'createdAt', 'desc');
+        return Array.from(new Set(baseTasks.map((t: any) => t.projectTag).filter(Boolean))).sort((a, b) => a.localeCompare(b)) as string[];
+    }, [tasks, sprintFilter, activeSprint]);
 
     const handleSortChange = (column: string) => {
         if (sortBy === column as any) {
@@ -243,6 +277,76 @@ const GroupDetails = () => {
     if (!group) {
         return <div className="text-center py-10">Group not found</div>;
     }
+
+    const renderMainContent = () => {
+        if (isLoading) {
+            return (
+                <div className="flex items-center justify-center h-full">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+                </div>
+            );
+        }
+
+        if (tasks.length === 0) {
+            return (
+                <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-full mb-4">
+                        <LayoutGrid size={32} className="text-gray-400 dark:text-gray-500" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No tasks yet</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
+                        {isAdmin
+                            ? 'Get started by creating your first task for this group.'
+                            : 'No tasks have been created in this group yet. Only admins can create tasks.'}
+                    </p>
+                    {isAdmin && (
+                        <button
+                            onClick={handleCreateTask}
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                        >
+                            <Plus size={18} className="mr-2" />
+                            Create Task
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        return (
+            <div className="h-full overflow-hidden">
+                {viewMode === 'board' ? (
+                    <div className="h-full p-6 overflow-x-auto">
+                        <TaskBoard
+                            tasks={filteredTasks}
+                            members={members}
+                            onEdit={handleEditTask}
+                            onDelete={handleDeleteTask}
+                            onViewDetail={setSelectedTask}
+                            isAdmin={isAdmin}
+                            currentUserId={user?.id}
+                            onStatusChange={handleStatusChange}
+                        />
+                    </div>
+                ) : (
+                    <div className="h-full flex flex-col">
+                        <TaskList
+                            tasks={filteredTasks}
+                            members={members}
+                            onEdit={handleEditTask}
+                            onDelete={handleDeleteTask}
+                            onViewDetail={setSelectedTask}
+                            onBulkStatusChange={handleBulkStatusChange}
+                            onBulkDelete={handleBulkDelete}
+                            isAdmin={isAdmin}
+                            sortBy={sortBy}
+                            sortDir={sortDir}
+                            onSortChange={handleSortChange}
+                        />
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 transition-colors duration-200 overflow-hidden">
@@ -267,12 +371,12 @@ const GroupDetails = () => {
                                 {connected ? (
                                     <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold rounded uppercase tracking-wider flex items-center gap-1">
                                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                        Live Sync
+                                        <span>Live Sync</span>
                                     </span>
                                 ) : (
                                     <span className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded uppercase tracking-wider flex items-center gap-1">
                                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                                        Offline
+                                        <span>Offline</span>
                                     </span>
                                 )}
                             </div>
@@ -290,7 +394,6 @@ const GroupDetails = () => {
                                 <Settings size={20} />
                             </button>
                         )}
-                        <NotificationBell />
                     </div>
                 </div>
             </header>
@@ -370,31 +473,28 @@ const GroupDetails = () => {
                         <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
                             <button
                                 onClick={() => setSprintFilter('active')}
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                                    sprintFilter === 'active' 
-                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${sprintFilter === 'active'
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
+                                    }`}
                             >
                                 Active Sprint
                             </button>
                             <button
                                 onClick={() => setSprintFilter('backlog')}
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                                    sprintFilter === 'backlog' 
-                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${sprintFilter === 'backlog'
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
+                                    }`}
                             >
                                 Backlog
                             </button>
                             <button
                                 onClick={() => setSprintFilter('all')}
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                                    sprintFilter === 'all' 
-                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${sprintFilter === 'all'
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
+                                    }`}
                             >
                                 All Tasks
                             </button>
@@ -418,94 +518,13 @@ const GroupDetails = () => {
                             </div>
                         )}
                         <span className="text-xs text-gray-400 dark:text-gray-500 mt-2 sm:mt-0 sm:ml-auto self-center">
-                            {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
+                            {filteredTasks.length} task{filteredTasks.length === 1 ? '' : 's'}
                         </span>
                     </div>
 
                     {/* View Area */}
                     <div className="flex-1 min-h-0 relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md overflow-hidden transition-colors duration-200">
-                        {isLoading ? (
-                            <div className="flex items-center justify-center h-full">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
-                            </div>
-                        ) : tasks.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                                <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-full mb-4">
-                                    <LayoutGrid size={32} className="text-gray-400 dark:text-gray-500" />
-                                </div>
-                                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No tasks yet</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
-                                    {isAdmin
-                                        ? 'Get started by creating your first task for this group.'
-                                        : 'No tasks have been created in this group yet. Only admins can create tasks.'}
-                                </p>
-                                {isAdmin && (
-                                    <button
-                                        onClick={handleCreateTask}
-                                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-                                    >
-                                        <Plus size={18} className="mr-2" />
-                                        Create Task
-                                    </button>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="h-full overflow-hidden">
-                                {viewMode === 'board' ? (
-                                    <div className="h-full p-6 overflow-x-auto">
-                                        <TaskBoard
-                                            tasks={filteredTasks}
-                                            members={members}
-                                            onEdit={handleEditTask}
-                                            onDelete={handleDeleteTask}
-                                            onViewDetail={setSelectedTask}
-                                            isAdmin={isAdmin}
-                                            currentUserId={user?.id}
-                                            onStatusChange={async (taskId, status) => {
-                                                try {
-                                                    // Optimistic UI update could be done here, but fetchData is simple
-                                                    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
-                                                    await api.patch(`/tasks/${taskId}`, { status });
-                                                    fetchData();
-                                                } catch (error) {
-                                                    console.error('Failed to update status', error);
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex flex-col">
-                                        <TaskList
-                                            tasks={filteredTasks}
-                                            members={members}
-                                            onEdit={handleEditTask}
-                                            onDelete={handleDeleteTask}
-                                            onViewDetail={setSelectedTask}
-                                            onBulkStatusChange={async (taskIds, status) => {
-                                                try {
-                                                    await api.patch(`/tasks/bulk/status`, { taskIds, status });
-                                                    fetchData();
-                                                } catch (error) {
-                                                    console.error('Failed to bulk update status', error);
-                                                }
-                                            }}
-                                            onBulkDelete={async (taskIds) => {
-                                                try {
-                                                    await api.post(`/tasks/bulk/delete`, { taskIds });
-                                                    fetchData();
-                                                } catch (error) {
-                                                    console.error('Failed to bulk delete tasks', error);
-                                                }
-                                            }}
-                                            isAdmin={isAdmin}
-                                            sortBy={sortBy}
-                                            sortDir={sortDir}
-                                            onSortChange={handleSortChange}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        {renderMainContent()}
                     </div>
                 </main>
             </div>

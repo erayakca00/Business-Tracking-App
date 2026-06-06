@@ -8,23 +8,27 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaskAttachment } from '../database/entities/task-attachment.entity';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { TasksService } from '../tasks/tasks.service';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class AttachmentsService {
-  private s3Client: S3Client | null = null;
-  private bucketName: string | null = null;
-  private publicUrl: string | null = null;
+  private readonly s3Client: S3Client | null = null;
+  private readonly bucketName: string | null = null;
+  private readonly publicUrl: string | null = null;
 
   constructor(
     @InjectRepository(TaskAttachment)
-    private attachmentRepository: Repository<TaskAttachment>,
+    private readonly attachmentRepository: Repository<TaskAttachment>,
     @Inject(forwardRef(() => TasksService))
-    private tasksService: TasksService,
+    private readonly tasksService: TasksService,
   ) {
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
@@ -41,7 +45,9 @@ export class AttachmentsService {
           secretAccessKey: secretAccessKey,
         },
       });
-      console.log('[R2 Storage] Cloudflare R2 storage client successfully initialized.');
+      console.log(
+        '[R2 Storage] Cloudflare R2 storage client successfully initialized.',
+      );
     } else {
       console.log(
         '[R2 Storage] Cloudflare R2 credentials missing. Operating in [LOCAL DISK STORAGE] fallback mode.',
@@ -68,16 +74,23 @@ export class AttachmentsService {
             ContentType: file.mimetype,
           }),
         );
-        
+
         if (this.publicUrl) {
-          const cleanUrl = this.publicUrl.endsWith('/') ? this.publicUrl.slice(0, -1) : this.publicUrl;
+          const cleanUrl = this.publicUrl.endsWith('/')
+            ? this.publicUrl.slice(0, -1)
+            : this.publicUrl;
           fileUrl = `${cleanUrl}/${uniqueFilename}`;
         } else {
           fileUrl = `${process.env.R2_ENDPOINT}/${this.bucketName}/${uniqueFilename}`;
         }
-        console.log(`[R2 Upload] File uploaded successfully to R2. URL: ${fileUrl}`);
+        console.log(
+          `[R2 Upload] File uploaded successfully to R2. URL: ${fileUrl}`,
+        );
       } catch (err) {
-        console.error('[R2 Upload] Failed to upload to Cloudflare R2. Falling back to local disk:', err);
+        console.error(
+          '[R2 Upload] Failed to upload to Cloudflare R2. Falling back to local disk:',
+          err,
+        );
         fileUrl = await this.saveToLocalDisk(file, uniqueFilename);
       }
     } else {
@@ -93,7 +106,7 @@ export class AttachmentsService {
       size: file.size,
       url: fileUrl,
     });
-    
+
     const savedAttachment = await this.attachmentRepository.save(attachment);
     await this.tasksService.logActivity(
       taskId,
@@ -104,7 +117,10 @@ export class AttachmentsService {
     return savedAttachment;
   }
 
-  private async saveToLocalDisk(file: Express.Multer.File, filename: string): Promise<string> {
+  private async saveToLocalDisk(
+    file: Express.Multer.File,
+    filename: string,
+  ): Promise<string> {
     const uploadDir = path.join(process.cwd(), 'uploads');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -147,7 +163,11 @@ export class AttachmentsService {
       { from: attachment.originalName },
     );
 
-    if (this.s3Client && this.bucketName && !attachment.url.startsWith('/uploads/')) {
+    if (
+      this.s3Client &&
+      this.bucketName &&
+      !attachment.url.startsWith('/uploads/')
+    ) {
       try {
         await this.s3Client.send(
           new DeleteObjectCommand({
@@ -155,9 +175,14 @@ export class AttachmentsService {
             Key: attachment.filename,
           }),
         );
-        console.log(`[R2 Delete] File ${attachment.filename} deleted successfully from R2.`);
+        console.log(
+          `[R2 Delete] File ${attachment.filename} deleted successfully from R2.`,
+        );
       } catch (err) {
-        console.error(`[R2 Delete] Failed to delete file ${attachment.filename} from R2:`, err);
+        console.error(
+          `[R2 Delete] Failed to delete file ${attachment.filename} from R2:`,
+          err,
+        );
       }
     } else {
       const filePath = path.join(process.cwd(), 'uploads', attachment.filename);

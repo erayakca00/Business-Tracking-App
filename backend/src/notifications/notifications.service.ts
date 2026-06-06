@@ -4,8 +4,8 @@ import { Repository } from 'typeorm';
 import { Notification } from '../database/entities/notification.entity';
 import { User } from '../database/entities/user.entity';
 import * as admin from 'firebase-admin';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 let firebaseApp: admin.app.App | null = null;
 try {
@@ -36,9 +36,9 @@ try {
 export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
-    private notificationsRepository: Repository<Notification>,
+    private readonly notificationsRepository: Repository<Notification>,
     @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async getUserNotifications(
@@ -96,6 +96,100 @@ export class NotificationsService {
     );
   }
 
+  private getNotificationTitle(type: string): string {
+    switch (type) {
+      case 'assigned':
+        return 'Task Assigned 📋';
+      case 'mention':
+        return 'New Mention 💬';
+      case 'comment':
+        return 'New Comment 💬';
+      case 'status_change':
+        return 'Task Status Updated 🔄';
+      case 'priority_change':
+        return 'Task Priority Updated ⚠️';
+      default:
+        return 'Business Tracking';
+    }
+  }
+
+  private async sendPush(
+    user: any,
+    title: string,
+    message: string,
+    type: string,
+    taskId?: string,
+  ): Promise<void> {
+    if (user.pushToken.startsWith('ExponentPushToken[')) {
+      try {
+        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            to: user.pushToken,
+            title,
+            body: message,
+            sound: 'default',
+            data: {
+              taskId: taskId || '',
+              type,
+            },
+          }),
+        });
+        const result = await response.json();
+        console.log(
+          `[Expo Push] Successfully requested push to user ${user.name} (${user.email}). Response:`,
+          JSON.stringify(result),
+        );
+      } catch (expoErr) {
+        console.error('[Expo Push] Error sending push notification:', expoErr);
+      }
+    } else if (firebaseApp) {
+      await firebaseApp.messaging().send({
+        token: user.pushToken,
+        notification: {
+          title,
+          body: message,
+        },
+        data: {
+          taskId: taskId || '',
+          type,
+        },
+        android: {
+          notification: {
+            sound: 'default',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+            },
+          },
+        },
+      });
+      console.log(
+        `[FCM] Successfully delivered push to user ${user.name} (${user.email})`,
+      );
+    } else {
+      console.log(
+        `\n=============================================================`,
+      );
+      console.log(`📢 [MOCK PUSH NOTIFICATION TRIGGERED]`);
+      console.log(`👉 To User:   ${user.name} (${user.email})`);
+      console.log(`👉 Token:     ${user.pushToken}`);
+      console.log(`👉 Title:     ${title}`);
+      console.log(`👉 Message:   ${message}`);
+      console.log(`👉 Task ID:   ${taskId || 'None'}`);
+      console.log(
+        `=============================================================\n`,
+      );
+    }
+  }
+
   // Called internally by other services (like TasksService or CommentsService)
   async createNotification(data: {
     userId: string;
@@ -115,88 +209,15 @@ export class NotificationsService {
       const user = await this.userRepository.findOne({
         where: { id: data.userId },
       });
-      if (user && user.pushToken) {
-        // Determine user-friendly notification title
-        let title = 'Business Tracking';
-        if (data.type === 'assigned') title = 'Task Assigned 📋';
-        else if (data.type === 'mention') title = 'New Mention 💬';
-        else if (data.type === 'comment') title = 'New Comment 💬';
-        else if (data.type === 'status_change')
-          title = 'Task Status Updated 🔄';
-        else if (data.type === 'priority_change')
-          title = 'Task Priority Updated ⚠️';
-
-        if (user.pushToken.startsWith('ExponentPushToken[')) {
-          try {
-            const response = await fetch('https://exp.host/--/api/v2/push/send', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: JSON.stringify({
-                to: user.pushToken,
-                title,
-                body: data.message,
-                sound: 'default',
-                data: {
-                  taskId: data.taskId || '',
-                  type: data.type,
-                },
-              }),
-            });
-            const result = await response.json();
-            console.log(
-              `[Expo Push] Successfully requested push to user ${user.name} (${user.email}). Response:`,
-              JSON.stringify(result),
-            );
-          } catch (expoErr) {
-            console.error('[Expo Push] Error sending push notification:', expoErr);
-          }
-        } else if (firebaseApp) {
-          await firebaseApp.messaging().send({
-            token: user.pushToken,
-            notification: {
-              title,
-              body: data.message,
-            },
-            data: {
-              taskId: data.taskId || '',
-              type: data.type,
-            },
-            android: {
-              notification: {
-                sound: 'default',
-              },
-            },
-            apns: {
-              payload: {
-                aps: {
-                  sound: 'default',
-                },
-              },
-            },
-          });
-          console.log(
-            `[FCM] Successfully delivered push to user ${user.name} (${user.email})`,
-          );
-        } else {
-          console.log(
-            `\n=============================================================`,
-          );
-          console.log(`📢 [MOCK PUSH NOTIFICATION TRIGGERED]`);
-          console.log(`👉 To User:   ${user.name} (${user.email})`);
-          console.log(`👉 Token:     ${user.pushToken}`);
-          console.log(`👉 Title:     ${title}`);
-          console.log(`👉 Message:   ${data.message}`);
-          console.log(`👉 Task ID:   ${data.taskId || 'None'}`);
-          console.log(
-            `=============================================================\n`,
-          );
-        }
+      if (user?.pushToken) {
+        const title = this.getNotificationTitle(data.type);
+        await this.sendPush(user, title, data.message, data.type, data.taskId);
       }
     } catch (pushErr) {
-      console.error('[Notification Push] Error sending push notification:', pushErr);
+      console.error(
+        '[Notification Push] Error sending push notification:',
+        pushErr,
+      );
     }
 
     return saved;

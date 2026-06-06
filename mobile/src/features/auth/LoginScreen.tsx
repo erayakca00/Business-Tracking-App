@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TextInput, Button, Text, Title, useTheme } from 'react-native-paper';
+import { TextInput, Button, Text, useTheme } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { useDispatch } from 'react-redux';
 import { setCredentials } from './authSlice';
@@ -29,7 +29,7 @@ const LoginScreen = () => {
                     setValue('email', lastEmail);
                 }
             } catch (e) {
-                // ignore error
+                console.warn('Failed to load last email:', e);
             }
         };
         loadLastEmail();
@@ -63,7 +63,11 @@ const LoginScreen = () => {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            <Title style={styles.title}>Login</Title>
+            <View style={styles.logoContainer}>
+                <Image source={require('../../assets/logo.png')} style={styles.logo} />
+                <Text variant="headlineSmall" style={[styles.brandName, { color: theme.colors.primary }]}>Business Tracking App</Text>
+            </View>
+            <Text variant="titleMedium" style={[styles.title, { color: theme.colors.outline }]}>Login</Text>
 
             <Controller
                 control={control}
@@ -149,10 +153,25 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         // backgroundColor removed
     },
+    logoContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    logo: {
+        width: 80,
+        height: 80,
+        borderRadius: 16,
+        marginBottom: 10,
+    },
+    brandName: {
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
     title: {
-        fontSize: 24,
+        fontSize: 18,
         marginBottom: 20,
         textAlign: 'center',
+        fontWeight: '500',
     },
     input: {
         marginBottom: 10,

@@ -17,6 +17,80 @@ interface CreateTaskModalProps {
     activeSprint?: any;
 }
 
+const validatePastDueDate = (selectedDate: Date, taskToEdit: any, dueDate: string): boolean => {
+    const now = new Date();
+    if (selectedDate >= now) {
+        return false;
+    }
+    if (taskToEdit?.dueDate) {
+        const originalTzDate = new Date(
+            new Date(taskToEdit.dueDate).getTime() -
+            new Date(taskToEdit.dueDate).getTimezoneOffset() * 60000
+        ).toISOString().slice(0, 16);
+        
+        if (new Date(taskToEdit.dueDate) >= selectedDate || dueDate === originalTzDate) {
+            return false;
+        }
+    }
+    return true;
+};
+
+const validateSprintDates = (selectedDate: Date, sprintId: string, sprints: any[]): string => {
+    if (!sprintId) return '';
+    const sprint = sprints.find(s => s.id === sprintId);
+    if (!sprint) return '';
+
+    if (sprint.startDate) {
+        const sStart = new Date(sprint.startDate);
+        sStart.setHours(0, 0, 0, 0);
+        if (selectedDate < sStart) {
+            return `Tarih ve saat sprint başlangıcından (${sStart.toLocaleDateString()}) önce olamaz.`;
+        }
+    }
+    if (sprint.endDate) {
+        const sEnd = new Date(sprint.endDate);
+        sEnd.setHours(23, 59, 59, 999);
+        if (selectedDate > sEnd) {
+            return `Tarih ve saat sprint bitişinden (${sEnd.toLocaleDateString()}) sonra olamaz.`;
+        }
+    }
+    return '';
+};
+
+const validateDueDateHelper = (
+    dueDate: string,
+    taskToEdit: any,
+    sprintId: string,
+    sprints: any[]
+): string => {
+    if (!dueDate) return '';
+
+    const selectedDate = new Date(dueDate);
+    
+    if (validatePastDueDate(selectedDate, taskToEdit, dueDate)) {
+        return 'Tarih ve saat şu anki zamanın gerisinde olamaz.';
+    }
+
+    return validateSprintDates(selectedDate, sprintId, sprints);
+};
+
+const parseTemplateTagHelper = (projectTag: string | undefined): { prefix: string; number: string } => {
+    if (!projectTag) {
+        return { prefix: '', number: '' };
+    }
+    const parts = projectTag.split('-');
+    if (parts.length === 2) {
+        return { prefix: parts[0], number: parts[1] };
+    }
+    return { prefix: projectTag, number: '' };
+};
+
+const computeDueDate = (timeVal: string, dateVal: string) => {
+    if (timeVal) return `${dateVal}T${timeVal}`;
+    if (dateVal) return `${dateVal}T00:00`;
+    return '';
+};
+
 const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     isOpen,
     onClose,
@@ -41,7 +115,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     const [tagNumber, setTagNumber] = useState('');  // numeric part e.g. 1
     const [showTagList, setShowTagList] = useState(false);
     const [dependsOnId, setDependsOnId] = useState<string | null>(null);
-    const [sprintId, setSprintId] = useState<string | ''>('');
+    const [sprintId, setSprintId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [dateError, setDateError] = useState<string>('');
     const [templates, setTemplates] = useState<any[]>([]);
@@ -79,7 +153,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     };
 
     const handleNumberChange = (val: string) => {
-        setTagNumber(val.replace(/[^0-9]/g, ''));
+        setTagNumber(val.replace(/\D/g, ''));
     };
 
     const applyExistingTag = (tag: string) => {
@@ -134,43 +208,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     }, [taskToEdit, isOpen]);
 
     useEffect(() => {
-        if (!dueDate) {
-            setDateError('');
-            return;
-        }
-
-        const selectedDate = new Date(dueDate);
-        const now = new Date();
-        
-        let error = '';
-        // If it's a new task, or if the due date was modified to be in the past
-        // Actually, we should check if selected is behind current time
-        // But only if it's new or they explicitly changed it?
-        // To be safe, we just validate it against `now`
-        
-        if (selectedDate < now && (!taskToEdit || new Date(taskToEdit.dueDate) < selectedDate || dueDate !== (taskToEdit.dueDate ? new Date(new Date(taskToEdit.dueDate).getTime() - new Date(taskToEdit.dueDate).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''))) {
-            error = 'Tarih ve saat şu anki zamanın gerisinde olamaz.';
-        } else if (sprintId) {
-            const sprint = sprints.find(s => s.id === sprintId);
-            if (sprint) {
-                if (sprint.startDate) {
-                    const sStart = new Date(sprint.startDate);
-                    sStart.setHours(0, 0, 0, 0);
-                    if (selectedDate < sStart) {
-                        error = `Tarih ve saat sprint başlangıcından (${sStart.toLocaleDateString()}) önce olamaz.`;
-                    }
-                }
-                if (sprint.endDate && !error) {
-                    const sEnd = new Date(sprint.endDate);
-                    sEnd.setHours(23, 59, 59, 999);
-                    if (selectedDate > sEnd) {
-                        error = `Tarih ve saat sprint bitişinden (${sEnd.toLocaleDateString()}) sonra olamaz.`;
-                    }
-                }
-            }
-        }
-        
-        setDateError(error);
+        setDateError(validateDueDateHelper(dueDate, taskToEdit, sprintId, sprints));
     }, [dueDate, sprintId, sprints, taskToEdit]);
 
     const handleSelectTemplate = (templateId: string) => {
@@ -182,19 +220,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             if (selected.priority) setPriority(selected.priority);
             if (selected.effort !== undefined && selected.effort !== null) setEffort(selected.effort);
             
-            if (selected.projectTag) {
-                const parts = selected.projectTag.split('-');
-                if (parts.length === 2) {
-                    setTagPrefix(parts[0]);
-                    setTagNumber(parts[1]);
-                } else {
-                    setTagPrefix(selected.projectTag);
-                    setTagNumber('');
-                }
-            } else {
-                setTagPrefix('');
-                setTagNumber('');
-            }
+            const { prefix, number } = parseTemplateTagHelper(selected.projectTag);
+            setTagPrefix(prefix);
+            setTagNumber(number);
         }
     };
 
@@ -248,6 +276,13 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
         }
     };
 
+    let submitButtonText = 'Create Task';
+    if (isLoading) {
+        submitButtonText = 'Saving...';
+    } else if (taskToEdit) {
+        submitButtonText = 'Save Changes';
+    }
+
     if (!isOpen) return null;
 
     return (
@@ -263,8 +298,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {!taskToEdit && templates.length > 0 && (
                         <div>
-                            <label className="block text-sm font-medium text-indigo-600 dark:text-indigo-400">Start from Template</label>
+                            <label htmlFor="template-select" className="block text-sm font-medium text-indigo-600 dark:text-indigo-400">Start from Template</label>
                             <select
+                                id="template-select"
                                 onChange={(e) => handleSelectTemplate(e.target.value)}
                                 className="mt-1 block w-full rounded-lg border border-indigo-200 dark:border-indigo-800 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 bg-indigo-50 dark:bg-gray-900 text-indigo-900 dark:text-indigo-200 transition-colors text-sm"
                             >
@@ -276,8 +312,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         </div>
                     )}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
+                        <label htmlFor="task-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
                         <input
+                            id="task-title"
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
@@ -287,8 +324,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                        <label htmlFor="task-desc" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
                         <textarea
+                            id="task-desc"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
@@ -298,8 +336,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                            <label htmlFor="task-status" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
                             <select
+                                id="task-status"
                                 value={status}
                                 onChange={(e) => setStatus(e.target.value)}
                                 className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
@@ -312,8 +351,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
+                            <label htmlFor="task-priority" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
                             <select
+                                id="task-priority"
                                 value={priority}
                                 onChange={(e) => setPriority(e.target.value)}
                                 className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
@@ -329,8 +369,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     {/* Sprint Selector */}
                     {sprints.length > 0 && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sprint</label>
+                            <label htmlFor="task-sprint" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sprint</label>
                             <select
+                                id="task-sprint"
                                 value={sprintId}
                                 onChange={(e) => { setSprintId(e.target.value); setDependsOnId(null); }}
                                 className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
@@ -348,8 +389,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Blocked By</label>
+                        <label htmlFor="task-blocked-by" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Blocked By</label>
                         <select
+                            id="task-blocked-by"
                             value={dependsOnId || ''}
                             onChange={(e) => setDependsOnId(e.target.value || null)}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -367,16 +409,17 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Deadline</label>
+                        <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Deadline</span>
                         <div className="flex gap-2">
                             <div className="flex-1">
-                                <label className="block text-xs text-gray-500 mb-1">Tarih (Klavye ile girilebilir)</label>
+                                <label htmlFor="task-due-date" className="block text-xs text-gray-500 mb-1">Tarih (Klavye ile girilebilir)</label>
                                 <input
+                                    id="task-due-date"
                                     type="date"
                                     value={dueDate ? dueDate.substring(0, 10) : ''}
                                     onChange={(e) => {
                                         const dateVal = e.target.value;
-                                        const timeVal = dueDate && dueDate.includes('T') ? dueDate.substring(11, 16) : '23:59';
+                                        const timeVal = dueDate?.includes('T') ? dueDate.substring(11, 16) : '23:59';
                                         setDueDate(dateVal ? `${dateVal}T${timeVal}` : '');
                                     }}
                                     className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
@@ -384,14 +427,15 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                                 />
                             </div>
                             <div className="flex-1">
-                                <label className="block text-xs text-gray-500 mb-1">Saat (Klavye ile girilebilir)</label>
+                                <label htmlFor="task-due-time" className="block text-xs text-gray-500 mb-1">Saat (Klavye ile girilebilir)</label>
                                 <input
+                                    id="task-due-time"
                                     type="time"
-                                    value={dueDate && dueDate.includes('T') ? dueDate.substring(11, 16) : ''}
+                                    value={dueDate?.includes('T') ? dueDate.substring(11, 16) : ''}
                                     onChange={(e) => {
                                         const timeVal = e.target.value;
                                         const dateVal = dueDate ? dueDate.substring(0, 10) : new Date().toISOString().substring(0, 10);
-                                        setDueDate(timeVal ? `${dateVal}T${timeVal}` : dateVal ? `${dateVal}T00:00` : '');
+                                        setDueDate(computeDueDate(timeVal, dateVal));
                                     }}
                                     className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                                     disabled={!canEdit}
@@ -404,7 +448,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Effort</label>
+                        <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Effort</span>
                         <div className="flex gap-2">
                             {([1, 2, 3, 4, 5] as const).map((val) => (
                                 <button
@@ -413,11 +457,18 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                                     onClick={() => setEffort(effort === val ? null : val)}
                                     disabled={!canEdit}
                                     title={['', 'Trivial', 'Easy', 'Medium', 'Hard', 'Very Hard'][val]}
-                                    className={`flex-1 py-1.5 rounded-md text-sm font-bold border transition-colors disabled:opacity-50 ${
-                                        effort === val
-                                            ? val <= 2 ? 'bg-green-500 border-green-500 text-white' : val === 3 ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-red-500 border-red-500 text-white'
-                                            : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                    }`}
+                                    className={`flex-1 py-1.5 rounded-md text-sm font-bold border transition-colors disabled:opacity-50 ${(() => {
+                                        if (effort !== val) {
+                                            return 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700';
+                                        }
+                                        if (val <= 2) {
+                                            return 'bg-green-500 border-green-500 text-white';
+                                        }
+                                        if (val === 3) {
+                                            return 'bg-yellow-500 border-yellow-500 text-white';
+                                        }
+                                        return 'bg-red-500 border-red-500 text-white';
+                                    })()}`}
                                 >
                                     {val}
                                 </button>
@@ -426,7 +477,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         <p className="text-xs text-gray-400 mt-1">1 = Trivial &nbsp;·&nbsp; 5 = Very Hard</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Tag</label>
+                        <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">Project Tag</span>
 
                         {/* Existing tags toggle */}
                         {sprintFilteredTags.length > 0 && (
@@ -468,6 +519,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                                     onChange={(e) => handlePrefixChange(e.target.value)}
                                     placeholder="PRO"
                                     maxLength={3}
+                                    aria-label="Project tag prefix"
                                     disabled={!canEdit}
                                     className="w-16 text-center rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm uppercase tracking-widest transition-colors"
                                 />
@@ -481,6 +533,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                                     value={tagNumber}
                                     onChange={(e) => handleNumberChange(e.target.value)}
                                     placeholder="1"
+                                    aria-label="Project tag number"
                                     disabled={!canEdit}
                                     className="w-16 text-center rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm transition-colors"
                                 />
@@ -501,8 +554,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Assign To</label>
+                        <label htmlFor="task-assignee" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Assign To</label>
                         <select
+                            id="task-assignee"
                             value={assignedTo}
                             onChange={(e) => setAssignedTo(e.target.value)}
                             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
@@ -532,7 +586,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                                 disabled={isLoading}
                                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 transition-colors"
                             >
-                                {isLoading ? 'Saving...' : (taskToEdit ? 'Save Changes' : 'Create Task')}
+                                {submitButtonText}
                             </button>
                         )}
                     </div>

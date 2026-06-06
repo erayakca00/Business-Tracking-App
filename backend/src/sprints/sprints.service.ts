@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Sprint, SprintStatus } from '../database/entities/sprint.entity';
 import { Task } from '../database/entities/task.entity';
 import { UserGroup, UserRole } from '../database/entities/user-group.entity';
@@ -310,12 +310,10 @@ export class SprintsService {
       where: { sprintId: sprint.id, date: dateStr },
     });
 
-    if (!snapshot) {
-      snapshot = this.snapshotRepository.create({
-        sprintId: sprint.id,
-        date: dateStr,
-      });
-    }
+    snapshot ??= this.snapshotRepository.create({
+      sprintId: sprint.id,
+      date: dateStr,
+    });
 
     snapshot.totalTasks = totalTasks;
     snapshot.completedTasks = completedTasks;
@@ -426,7 +424,7 @@ export class SprintsService {
         totalDays > 1
           ? Math.max(
               0,
-              parseFloat(
+              Number.parseFloat(
                 (totalTasksAtStart * (1 - index / (totalDays - 1))).toFixed(2),
               ),
             )
@@ -435,7 +433,7 @@ export class SprintsService {
         totalDays > 1
           ? Math.max(
               0,
-              parseFloat(
+              Number.parseFloat(
                 (totalEffortAtStart * (1 - index / (totalDays - 1))).toFixed(2),
               ),
             )
@@ -457,7 +455,7 @@ export class SprintsService {
         // Past day, but no snapshot was recorded (e.g. server was off). Fall back to preceding snapshot or start value
         const previousSnapshots = snapshots.filter((s) => s.date < dateStr);
         if (previousSnapshots.length > 0) {
-          const latestPrev = previousSnapshots[previousSnapshots.length - 1];
+          const latestPrev = previousSnapshots.at(-1)!;
           remainingTasks = latestPrev.totalTasks - latestPrev.completedTasks;
           remainingEffort = latestPrev.totalEffort - latestPrev.completedEffort;
         } else {

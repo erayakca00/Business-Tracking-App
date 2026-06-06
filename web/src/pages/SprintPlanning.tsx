@@ -179,7 +179,7 @@ export default function SprintPlanning() {
     };
 
     const handleDeleteTask = async (taskId: string) => {
-        if (!window.confirm('Are you sure you want to delete this task?')) return;
+        if (!globalThis.confirm('Are you sure you want to delete this task?')) return;
         try {
             await api.delete(`/tasks/${taskId}`);
             fetchData();
@@ -204,6 +204,13 @@ export default function SprintPlanning() {
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             </div>
         );
+    }
+
+    let saveButtonText = 'Create Sprint';
+    if (formLoading) {
+        saveButtonText = 'Saving...';
+    } else if (editingSprint) {
+        saveButtonText = 'Save Changes';
     }
 
     return (
@@ -259,42 +266,54 @@ export default function SprintPlanning() {
                             </div>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sprint Name *</label>
-                                    <input
-                                        value={formName}
-                                        onChange={e => setFormName(e.target.value)}
-                                        placeholder="e.g. Sprint 1"
-                                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                    />
+                                    <label htmlFor="sprintName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        <span className="block mb-1">Sprint Name *</span>
+                                        <input
+                                            id="sprintName"
+                                            value={formName}
+                                            onChange={e => setFormName(e.target.value)}
+                                            placeholder="e.g. Sprint 1"
+                                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                    </label>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sprint Goal</label>
-                                    <textarea
-                                        value={formGoal}
-                                        onChange={e => setFormGoal(e.target.value)}
-                                        placeholder="What does this sprint aim to achieve?"
-                                        rows={2}
-                                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                                    />
+                                    <label htmlFor="sprintGoal" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        <span className="block mb-1">Sprint Goal</span>
+                                        <textarea
+                                            id="sprintGoal"
+                                            value={formGoal}
+                                            onChange={e => setFormGoal(e.target.value)}
+                                            placeholder="What does this sprint aim to achieve?"
+                                            rows={2}
+                                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                                        />
+                                    </label>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
-                                        <input
-                                            type="date"
-                                            value={formStartDate}
-                                            onChange={e => setFormStartDate(e.target.value)}
-                                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                        />
+                                        <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <span className="block mb-1">Start Date</span>
+                                            <input
+                                                id="startDate"
+                                                type="date"
+                                                value={formStartDate}
+                                                onChange={e => setFormStartDate(e.target.value)}
+                                                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </label>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
-                                        <input
-                                            type="date"
-                                            value={formEndDate}
-                                            onChange={e => setFormEndDate(e.target.value)}
-                                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                        />
+                                        <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <span className="block mb-1">End Date</span>
+                                            <input
+                                                id="endDate"
+                                                type="date"
+                                                value={formEndDate}
+                                                onChange={e => setFormEndDate(e.target.value)}
+                                                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </label>
                                     </div>
                                 </div>
                                 <div className="flex justify-end gap-2 pt-2">
@@ -306,7 +325,7 @@ export default function SprintPlanning() {
                                         disabled={!formName.trim() || formLoading}
                                         className="px-4 py-2 text-sm text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors"
                                     >
-                                        {formLoading ? 'Saving...' : (editingSprint ? 'Save Changes' : 'Create Sprint')}
+                                        {saveButtonText}
                                     </button>
                                 </div>
                             </div>
@@ -429,8 +448,8 @@ export default function SprintPlanning() {
                                                 )}
                                             </div>
                                         </div>
-                                        {isAdmin && sprints.filter(s => s.status !== 'completed').length > 0 && (
-                                            <select
+                                         {isAdmin && sprints.some(s => s.status !== 'completed') && (
+                                             <select
                                                 defaultValue=""
                                                 onChange={e => { if (e.target.value) handleAddToSprint(e.target.value, task.id); }}
                                                 className="text-xs border border-gray-300 dark:border-gray-600 rounded px-1 py-1 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 shrink-0"
@@ -517,6 +536,19 @@ export default function SprintPlanning() {
     );
 }
 
+const taskStatusDotColors: Record<string, string> = {
+    done: 'bg-green-500',
+    in_progress: 'bg-blue-500',
+    review: 'bg-yellow-500',
+    blocked: 'bg-red-500',
+};
+
+const taskPriorityBadgeColors: Record<string, string> = {
+    high: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400',
+    medium: 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400',
+    low: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
+};
+
 // ── Sprint Card Sub-component ────────────────────────────────────────────────
 function SprintCard({
     sprint, isAdmin, expanded, onToggle,
@@ -526,19 +558,41 @@ function SprintCard({
     const doneTasks = sprint.tasks?.filter((t: any) => t.status === 'done').length || 0;
     const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
+    let borderClass = 'border-gray-200 dark:border-gray-700';
+    if (sprint.status === 'active') {
+        borderClass = 'border-green-300 dark:border-green-700';
+    } else if (sprint.status === 'completed') {
+        borderClass = 'border-gray-200 dark:border-gray-700 opacity-75';
+    }
+
+    let statusLabel = '◦ Planned';
+    if (sprint.status === 'active') {
+        statusLabel = '⚡ Active';
+    } else if (sprint.status === 'completed') {
+        statusLabel = '✓ Completed';
+    }
+
+    let daysText = '';
+    let daysColor = '';
+    if (daysRemaining !== null) {
+        if (daysRemaining < 0) {
+            daysText = `${Math.abs(daysRemaining)}d overdue`;
+            daysColor = 'text-red-500';
+        } else {
+            daysText = `${daysRemaining}d left`;
+            daysColor = daysRemaining <= 3 ? 'text-yellow-500' : 'text-green-500';
+        }
+    }
+
     return (
-        <div className={`bg-white dark:bg-gray-800 rounded-xl border shadow-sm overflow-hidden ${
-            sprint.status === 'active' ? 'border-green-300 dark:border-green-700' :
-            sprint.status === 'completed' ? 'border-gray-200 dark:border-gray-700 opacity-75' :
-            'border-gray-200 dark:border-gray-700'
-        }`}>
+        <div className={`bg-white dark:bg-gray-800 rounded-xl border shadow-sm overflow-hidden ${borderClass}`}>
             {/* Sprint Header */}
             <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${statusColors[sprint.status]}`}>
-                                {sprint.status === 'active' ? '⚡ Active' : sprint.status === 'completed' ? '✓ Completed' : '◦ Planned'}
+                                {statusLabel}
                             </span>
                             <h3 className="font-bold text-gray-900 dark:text-white">{sprint.name}</h3>
                         </div>
@@ -553,8 +607,8 @@ function SprintCard({
                                 </span>
                             )}
                             {sprint.status === 'active' && daysRemaining !== null && (
-                                <span className={`font-semibold ${daysRemaining < 0 ? 'text-red-500' : daysRemaining <= 3 ? 'text-yellow-500' : 'text-green-500'}`}>
-                                    {daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d left`}
+                                <span className={`font-semibold ${daysColor}`}>
+                                    {daysText}
                                 </span>
                             )}
                             <span>{totalTasks} tasks · {doneTasks} done</span>
@@ -610,32 +664,33 @@ function SprintCard({
                         <p className="text-center text-sm text-gray-400 py-4">No tasks in this sprint yet</p>
                     )}
                     {sprint.tasks?.map((task: any) => (
-                        <div key={task.id} onClick={() => onViewTask && onViewTask(task)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer">
-                            <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                task.status === 'done' ? 'bg-green-500' :
-                                task.status === 'in_progress' ? 'bg-blue-500' :
-                                task.status === 'review' ? 'bg-yellow-500' :
-                                task.status === 'blocked' ? 'bg-red-500' : 'bg-gray-300'
-                            }`} />
-                            <div className="flex-1 min-w-0">
-                                <span className={`text-sm ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
-                                    {task.title}
+                        <div
+                            key={task.id}
+                            className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                        >
+                            <button
+                                type="button"
+                                onClick={() => onViewTask?.(task)}
+                                className="flex-1 text-left flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded p-0.5 min-w-0"
+                            >
+                                <div className={`w-2 h-2 rounded-full shrink-0 ${taskStatusDotColors[task.status] || 'bg-gray-300'}`} />
+                                <div className="flex-1 min-w-0">
+                                    <span className={`text-sm ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                                        {task.title}
+                                    </span>
+                                    {task.projectTag && (
+                                        <span className="ml-2 text-[10px] text-indigo-500 dark:text-indigo-400">📁 {task.projectTag}</span>
+                                    )}
+                                </div>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${taskPriorityBadgeColors[task.priority] || taskPriorityBadgeColors.low}`}>
+                                    {task.priority}
                                 </span>
-                                {task.projectTag && (
-                                    <span className="ml-2 text-[10px] text-indigo-500 dark:text-indigo-400">📁 {task.projectTag}</span>
-                                )}
-                            </div>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                                task.priority === 'high' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' :
-                                task.priority === 'medium' ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400' :
-                                'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
-                            }`}>
-                                {task.priority}
-                            </span>
+                            </button>
                             {isAdmin && sprint.status !== 'completed' && (
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); onRemoveTask(task.id); }}
-                                    className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                                    type="button"
+                                    onClick={() => onRemoveTask(task.id)}
+                                    className="text-gray-300 hover:text-red-500 transition-colors shrink-0 p-1 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
                                     title="Remove from sprint"
                                 >
                                     <X size={13} />

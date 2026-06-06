@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { ArrowLeft, Moon, Sun } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Moon, Sun } from 'lucide-react';
 
 const Settings: React.FC = () => {
     const { theme, toggleTheme } = useTheme();
@@ -10,9 +9,6 @@ const Settings: React.FC = () => {
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
             <header className="bg-white dark:bg-gray-800 shadow-sm transition-colors duration-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center">
-                    <Link to="/dashboard" className="mr-4 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors">
-                        <ArrowLeft size={24} />
-                    </Link>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
                 </div>
             </header>

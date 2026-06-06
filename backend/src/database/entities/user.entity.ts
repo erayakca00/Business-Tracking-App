@@ -5,7 +5,6 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
-  ManyToMany,
 } from 'typeorm';
 import { UserGroup } from './user-group.entity';
 import { Task } from './task.entity';

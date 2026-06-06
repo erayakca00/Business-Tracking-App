@@ -40,6 +40,165 @@ interface TaskListProps {
     onSortChange: (column: string) => void;
 }
 
+function getStatusColor(status: string): string {
+    switch (status) {
+        case 'done':
+            return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+        case 'in_progress':
+            return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
+        case 'review':
+            return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
+        default:
+            return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+    }
+}
+
+function getPriorityColor(priority: string): string {
+    switch (priority) {
+        case 'high':
+            return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+        case 'medium':
+            return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
+        default:
+            return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+    }
+}
+
+interface TaskRowProps {
+    task: Task;
+    members: Member[];
+    isSelected: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    onSelect: (taskId: string) => void;
+    onEdit: (task: Task) => void;
+    onDelete: (taskId: string) => Promise<void>;
+    onViewDetail?: (task: Task) => void;
+}
+
+const TaskRow: React.FC<TaskRowProps> = ({
+    task,
+    members,
+    isSelected,
+    canEdit,
+    canDelete,
+    onSelect,
+    onEdit,
+    onDelete,
+    onViewDetail,
+}) => {
+    const isBlocked = task.blockedBy?.some(b => b.status !== 'done') || false;
+    const activeBlockers = task.blockedBy?.filter(b => b.status !== 'done') || [];
+    const assignee = members.find(m => m.userId === task.assignedToId);
+
+    return (
+        <tr
+            className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+            onClick={() => onViewDetail ? onViewDetail(task) : onSelect(task.id)}
+        >
+            <td className="px-3 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onSelect(task.id)}
+                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 bg-white dark:bg-gray-800 transition-colors"
+                />
+            </td>
+            <td className="px-3 py-4">
+                <div className="flex items-center gap-1.5">
+                    {isBlocked && <span className="text-red-500 flex-shrink-0" title="Locked (Blocked)">🔒</span>}
+                    <div className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</div>
+                </div>
+                {task.description && <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{task.description}</div>}
+                {activeBlockers.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                        {activeBlockers.map(b => (
+                            <span key={b.id} className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                🔒 Blocked by: {b.title}
+                            </span>
+                        ))}
+                    </div>
+                )}
+                {task.dependsOn && activeBlockers.length === 0 && (
+                    <div className="mt-1">
+                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                            🚧 Blocked by: {task.dependsOn.title}
+                        </span>
+                    </div>
+                )}
+            </td>
+            <td className="px-2 py-4 whitespace-nowrap">
+                <div className="flex gap-1 flex-wrap">
+                    {task.projectTag && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
+                            📁 {task.projectTag}
+                        </span>
+                    )}
+                    {!(task as any).assignedTo && !task.assignedToId && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800">
+                            👤 Unassigned
+                        </span>
+                    )}
+                    {!task.projectTag && ((task as any).assignedTo || task.assignedToId) && (
+                        <span className="text-gray-400 text-xs">—</span>
+                    )}
+                </div>
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap">
+                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(task.status)}`}>
+                    {task.status.replace('_', ' ')}
+                </span>
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap">
+                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityColor(task.priority)}`}>
+                    {task.priority}
+                </span>
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap">
+                {assignee ? (
+                    <div className="flex items-center">
+                        <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs mr-2 border border-transparent dark:border-gray-600">
+                            {assignee.name.charAt(0)}
+                        </div>
+                        <span className="text-sm text-gray-900 dark:text-gray-300">{assignee.name}</span>
+                    </div>
+                ) : (
+                    <span className="text-sm text-gray-500 dark:text-gray-400 italic">Unassigned</span>
+                )}
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                {task.updatedAt ? new Date(task.updatedAt).toLocaleDateString() : '—'}
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                {canEdit && (
+                    <button
+                        onClick={() => onEdit(task)}
+                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-4"
+                        title="Edit Task"
+                    >
+                        <Edit size={18} />
+                    </button>
+                )}
+                {canDelete && (
+                    <button
+                        onClick={() => onDelete(task.id)}
+                        className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                        title="Delete Task"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                )}
+            </td>
+        </tr>
+    );
+};
+
 const TaskList: React.FC<TaskListProps> = ({
     tasks,
     members,
@@ -119,126 +278,18 @@ const TaskList: React.FC<TaskListProps> = ({
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 transition-colors duration-200">
                         {tasks.map((task) => (
-                            <tr
+                            <TaskRow
                                 key={task.id}
-                                className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                                onClick={() => onViewDetail ? onViewDetail(task) : handleSelectTask(task.id)}
-                            >
-                                <td className="px-3 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedTaskIds.includes(task.id)}
-                                        onChange={() => handleSelectTask(task.id)}
-                                        className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 bg-white dark:bg-gray-800 transition-colors"
-                                    />
-                                </td>
-                                <td className="px-3 py-4">
-                                    {(() => {
-                                        const isBlocked = task.blockedBy?.some(b => b.status !== 'done') || false;
-                                        const activeBlockers = task.blockedBy?.filter(b => b.status !== 'done') || [];
-                                        return (
-                                            <>
-                                                <div className="flex items-center gap-1.5">
-                                                    {isBlocked && <span className="text-red-500 flex-shrink-0" title="Locked (Blocked)">🔒</span>}
-                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</div>
-                                                </div>
-                                                {task.description && <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{task.description}</div>}
-                                                {activeBlockers.length > 0 && (
-                                                    <div className="mt-1 flex flex-wrap gap-1">
-                                                        {activeBlockers.map(b => (
-                                                            <span key={b.id} className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-                                                                🔒 Blocked by: {b.title}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {task.dependsOn && activeBlockers.length === 0 && (
-                                                    <div className="mt-1">
-                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-                                                            🚧 Blocked by: {task.dependsOn.title}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-                                </td>
-                                <td className="px-2 py-4 whitespace-nowrap">
-                                    <div className="flex gap-1 flex-wrap">
-                                        {task.projectTag && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
-                                                📁 {task.projectTag}
-                                            </span>
-                                        )}
-                                        {!(task as any).assignedTo && !task.assignedToId && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800">
-                                                👤 Unassigned
-                                            </span>
-                                        )}
-                                        {!task.projectTag && ((task as any).assignedTo || task.assignedToId) && (
-                                            <span className="text-gray-400 text-xs">—</span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-3 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === 'done' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
-                                        task.status === 'in_progress' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' :
-                                            task.status === 'review' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
-                                                'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-                                        }`}>
-                                        {task.status.replace('_', ' ')}
-                                    </span>
-                                </td>
-                                <td className="px-3 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' :
-                                        task.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
-                                            'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                                        }`}>
-                                        {task.priority}
-                                    </span>
-                                </td>
-                                <td className="px-3 py-4 whitespace-nowrap">
-                                    {task.assignedToId ? (
-                                        <div className="flex items-center">
-                                            <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs mr-2 border border-transparent dark:border-gray-600">
-                                                {members.find(m => m.userId === task.assignedToId)?.name.charAt(0) || '?'}
-                                            </div>
-                                            <span className="text-sm text-gray-900 dark:text-gray-300">{members.find(m => m.userId === task.assignedToId)?.name || 'Unknown'}</span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-sm text-gray-500 dark:text-gray-400 italic">Unassigned</span>
-                                    )}
-                                </td>
-                                <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
-                                    {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}
-                                </td>
-                                <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
-                                    {task.updatedAt ? new Date(task.updatedAt).toLocaleDateString() : '—'}
-                                </td>
-                                <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
-                                    {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
-                                </td>
-                                <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
-                                    {canEditTask(task) && (
-                                        <button
-                                            onClick={() => onEdit(task)}
-                                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-4"
-                                            title="Edit Task"
-                                        >
-                                            <Edit size={18} />
-                                        </button>
-                                    )}
-                                    {canDeleteTask && (
-                                        <button
-                                            onClick={() => onDelete(task.id)}
-                                            className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                                            title="Delete Task"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    )}
-                                </td>
-                            </tr>
+                                task={task}
+                                members={members}
+                                isSelected={selectedTaskIds.includes(task.id)}
+                                canEdit={canEditTask(task)}
+                                canDelete={canDeleteTask}
+                                onSelect={handleSelectTask}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                                onViewDetail={onViewDetail}
+                            />
                         ))}
                     </tbody>
                 </table>
@@ -256,7 +307,7 @@ const TaskList: React.FC<TaskListProps> = ({
                                 }}
                                 className="flex items-center text-sm font-medium hover:text-blue-300 transition-colors"
                             >
-                                <span className="mr-2">✏️</span>
+                                <Edit size={16} className="mr-2" />
                                 Edit
                             </button>
                         )}

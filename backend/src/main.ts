@@ -2,8 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
-import * as fs from 'fs';
+import { join } from 'node:path';
+import * as fs from 'node:fs';
 import helmet from 'helmet';
 
 async function bootstrap() {

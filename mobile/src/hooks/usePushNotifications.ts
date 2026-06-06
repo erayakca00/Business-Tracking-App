@@ -80,7 +80,7 @@ export const usePushNotifications = (navigationRef?: { current: any }) => {
         // Helper to safely navigate using the ref
         const navigateToTask = (taskId: string) => {
             if (navigationRef?.current?.isReady()) {
-                (navigationRef.current as any).navigate('MainTabs', {
+                navigationRef.current.navigate('MainTabs', {
                     screen: 'NotificationsTab',
                     params: { taskId },
                 });

@@ -17,12 +17,12 @@ import { EventsGateway } from '../events/events.gateway';
 export class CommentsService {
   constructor(
     @InjectRepository(Comment)
-    private commentsRepository: Repository<Comment>,
+    private readonly commentsRepository: Repository<Comment>,
     @InjectRepository(Task)
-    private taskRepository: Repository<Task>,
-    private notificationsService: NotificationsService,
-    private usersService: UsersService,
-    private eventsGateway: EventsGateway,
+    private readonly taskRepository: Repository<Task>,
+    private readonly notificationsService: NotificationsService,
+    private readonly usersService: UsersService,
+    private readonly eventsGateway: EventsGateway,
   ) {}
 
   async findByTask(taskId: string): Promise<Comment[]> {

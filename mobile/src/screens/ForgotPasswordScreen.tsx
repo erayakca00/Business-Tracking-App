@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
-import { TextInput, Button, Text, Title, useTheme } from 'react-native-paper';
+import { TextInput, Button, Text, useTheme } from 'react-native-paper';
 import { useForgotPasswordMutation } from '../services/authApi';
 import { useNavigation } from '@react-navigation/native';
 
@@ -31,7 +31,7 @@ const ForgotPasswordScreen = () => {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            <Title style={styles.title}>Reset Password</Title>
+            <Text variant="headlineMedium" style={styles.title}>Reset Password</Text>
             <Text style={[styles.description, { color: theme.colors.outline }]}>
                 Enter your email address and we will send you instructions to reset your password.
             </Text>

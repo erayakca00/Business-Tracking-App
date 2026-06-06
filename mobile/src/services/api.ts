@@ -19,7 +19,7 @@ const baseQuery = fetchBaseQuery({
 
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
     let result = await baseQuery(args, api, extraOptions);
-    if (result.error && result.error.status === 401) {
+    if (result.error?.status === 401) {
         api.dispatch(logout());
     }
     return result;

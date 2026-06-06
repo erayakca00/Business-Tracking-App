@@ -18,7 +18,7 @@ import {
     Notification,
 } from '../services/notificationsApi';
 import TaskDetailSheet, { TaskForSheet } from '../components/TaskDetailSheet';
-import { useGetGroupMembersQuery } from '../services/groupsApi';
+
 import { useSelector } from 'react-redux';
 import { RootState } from '../app/store';
 
@@ -165,6 +165,73 @@ const NotificationRow = ({ item, onPress, onMarkRead }: NotificationRowProps) =>
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+const NotificationSeparator = () => (
+    <Divider style={{ opacity: 0.4 }} />
+);
+
+type ListItemType =
+    | { type: 'section'; label: string }
+    | { type: 'item'; data: Notification };
+
+const renderNotificationsContentHelper = ({
+    isLoading,
+    notifications,
+    theme,
+    listData,
+    renderItem,
+    isFetching,
+    refetch,
+}: {
+    isLoading: boolean;
+    notifications: Notification[];
+    theme: any;
+    listData: ListItemType[];
+    renderItem: (info: { item: ListItemType }) => React.ReactElement;
+    isFetching: boolean;
+    refetch: () => void;
+}) => {
+    if (isLoading) {
+        return (
+            <View style={styles.center}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
+    }
+
+    if (notifications.length === 0) {
+        return (
+            <View style={styles.center}>
+                <IconButton icon="bell-sleep-outline" size={64} iconColor={theme.colors.outline} />
+                <Text style={[styles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>
+                    All caught up!
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: theme.colors.outline }]}>
+                    You have no notifications yet.
+                </Text>
+            </View>
+        );
+    }
+
+    return (
+        <FlatList
+            data={listData}
+            renderItem={renderItem}
+            keyExtractor={(item) =>
+                item.type === 'section' ? `section-${item.label}` : item.data.id
+            }
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+                <RefreshControl
+                    refreshing={isFetching && !isLoading}
+                    onRefresh={refetch}
+                    colors={[theme.colors.primary]}
+                />
+            }
+            ItemSeparatorComponent={NotificationSeparator}
+        />
+    );
+};
+
 const NotificationsScreen = () => {
     const theme = useTheme();
     const navigation = useNavigation();
@@ -194,7 +261,7 @@ const NotificationsScreen = () => {
             // Clear route params so it doesn't open again on subsequent screen visits
             navigation.setParams({ taskId: undefined } as any);
         }
-    }, [initialTaskId]);
+    }, [initialTaskId, navigation]);
 
     const [markAsRead] = useMarkAsReadMutation();
     const [markAllAsRead, { isLoading: isMarkingAll }] = useMarkAllAsReadMutation();
@@ -202,11 +269,7 @@ const NotificationsScreen = () => {
     // Bottom sheet for task detail
     const sheetRef = useRef<BottomSheet>(null);
     const [selectedTask, setSelectedTask] = useState<TaskForSheet | null>(null);
-    const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
-    const { data: members = [] } = useGetGroupMembersQuery(activeGroupId ?? '', {
-        skip: !activeGroupId,
-    });
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -249,18 +312,14 @@ const NotificationsScreen = () => {
     const todayItems = notifications.filter(n => new Date(n.createdAt) >= today);
     const earlierItems = notifications.filter(n => new Date(n.createdAt) < today);
 
-    type ListItem =
-        | { type: 'section'; label: string }
-        | { type: 'item'; data: Notification };
-
-    const listData: ListItem[] = [
+    const listData: ListItemType[] = [
         ...(todayItems.length > 0 ? [{ type: 'section' as const, label: 'Today' }] : []),
         ...todayItems.map(n => ({ type: 'item' as const, data: n })),
         ...(earlierItems.length > 0 ? [{ type: 'section' as const, label: 'Earlier' }] : []),
         ...earlierItems.map(n => ({ type: 'item' as const, data: n })),
     ];
 
-    const renderItem = ({ item }: { item: ListItem }) => {
+    const renderItem = ({ item }: { item: ListItemType }) => {
         if (item.type === 'section') {
             return (
                 <Text style={[styles.sectionLabel, { color: theme.colors.outline }]}>
@@ -316,46 +375,21 @@ const NotificationsScreen = () => {
                 </View>
 
                 {/* ── Content ── */}
-                {isLoading ? (
-                    <View style={styles.center}>
-                        <ActivityIndicator size="large" />
-                    </View>
-                ) : notifications.length === 0 ? (
-                    <View style={styles.center}>
-                        <IconButton icon="bell-sleep-outline" size={64} iconColor={theme.colors.outline} />
-                        <Text style={[styles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>
-                            All caught up!
-                        </Text>
-                        <Text style={[styles.emptySubtitle, { color: theme.colors.outline }]}>
-                            You have no notifications yet.
-                        </Text>
-                    </View>
-                ) : (
-                    <FlatList
-                        data={listData}
-                        renderItem={renderItem}
-                        keyExtractor={(item, idx) =>
-                            item.type === 'section' ? `section-${item.label}` : item.data.id
-                        }
-                        contentContainerStyle={styles.listContent}
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={isFetching && !isLoading}
-                                onRefresh={refetch}
-                                colors={[theme.colors.primary]}
-                            />
-                        }
-                        ItemSeparatorComponent={() => (
-                            <Divider style={{ opacity: 0.4 }} />
-                        )}
-                    />
-                )}
+                {renderNotificationsContentHelper({
+                    isLoading,
+                    notifications,
+                    theme,
+                    listData,
+                    renderItem,
+                    isFetching,
+                    refetch,
+                })}
             </View>
 
             {/* ── Task Detail Sheet ── */}
             <TaskDetailSheet
                 task={selectedTask}
-                members={members.map((m: any) => ({ userId: m.userId, name: m.name, role: m.role }))}
+                members={[]}
                 currentUserId={user?.id}
                 isAdmin={false}
                 onClose={closeSheet}

@@ -44,6 +44,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (error) {
       console.log(
         `[Socket] Rejected connection from ${client.id}: Invalid token.`,
+        error,
       );
       client.disconnect();
     }

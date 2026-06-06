@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
-import { Text, Card, FAB, Portal, Modal, TextInput, Button, ActivityIndicator, Chip, Divider, useTheme, IconButton, Dialog } from 'react-native-paper';
+import { Text, Card, FAB as PaperFAB, Portal, Modal, TextInput, Button, ActivityIndicator, Chip, Divider, useTheme, IconButton, Dialog } from 'react-native-paper';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../app/store';
@@ -216,8 +216,6 @@ const SprintPlanningScreen = () => {
         sheetRef.current?.expand();
     };
 
-
-
     // Calculate days remaining
     const getDaysRemaining = (endDateStr: string) => {
         const diff = new Date(endDateStr).getTime() - Date.now();
@@ -266,141 +264,39 @@ const SprintPlanningScreen = () => {
                         }
                     >
                         {activeTab === 'sprints' ? (
-                            <View style={styles.sprintsList}>
-                                {sprints.length === 0 ? (
-                                    <View style={styles.emptyState}>
-                                        <IconButton icon="calendar-sync-outline" size={48} iconColor={theme.colors.outline} />
-                                        <Text style={{ color: theme.colors.outline }}>No Sprints Created Yet</Text>
-                                    </View>
-                                ) : (
-                                    <>
-                                        {/* Active Sprint Section */}
-                                        {activeSprint && (
-                                            <SprintCard
-                                                sprint={activeSprint}
-                                                expanded={expandedSprints.has(activeSprint.id)}
-                                                onToggle={() => toggleExpand(activeSprint.id)}
-                                                onEdit={() => handleOpenEdit(activeSprint)}
-                                                onComplete={() => setConfirmCompleteId(activeSprint.id)}
-                                                onRemoveTask={(taskId) => handleRemoveTaskFromSprint(activeSprint.id, taskId)}
-                                                onTaskPress={openTaskSheet}
-                                                daysRemaining={activeSprint.endDate ? getDaysRemaining(activeSprint.endDate) : null}
-                                                isAdmin={isAdmin}
-                                                theme={theme}
-                                            />
-                                        )}
-
-                                        {/* Planned Sprints */}
-                                        {plannedSprints.length > 0 && (
-                                            <View style={styles.sectionContainer}>
-                                                <Text variant="titleSmall" style={[styles.sectionHeader, { color: theme.colors.outline }]}>PLANNED SPRINTS</Text>
-                                                {plannedSprints.map(sprint => (
-                                                    <SprintCard
-                                                        key={sprint.id}
-                                                        sprint={sprint}
-                                                        expanded={expandedSprints.has(sprint.id)}
-                                                        onToggle={() => toggleExpand(sprint.id)}
-                                                        onEdit={() => handleOpenEdit(sprint)}
-                                                        onStart={() => handleStartSprint(sprint.id)}
-                                                        onDelete={() => setConfirmDeleteId(sprint.id)}
-                                                        onRemoveTask={(taskId) => handleRemoveTaskFromSprint(sprint.id, taskId)}
-                                                        onTaskPress={openTaskSheet}
-                                                        daysRemaining={null}
-                                                        isAdmin={isAdmin}
-                                                        theme={theme}
-                                                    />
-                                                ))}
-                                            </View>
-                                        )}
-
-                                        {/* Completed Sprints */}
-                                        {completedSprints.length > 0 && (
-                                            <View style={styles.sectionContainer}>
-                                                <Text variant="titleSmall" style={[styles.sectionHeader, { color: theme.colors.outline }]}>COMPLETED SPRINTS</Text>
-                                                {completedSprints.map(sprint => (
-                                                    <SprintCard
-                                                        key={sprint.id}
-                                                        sprint={sprint}
-                                                        expanded={expandedSprints.has(sprint.id)}
-                                                        onToggle={() => toggleExpand(sprint.id)}
-                                                        onDelete={() => setConfirmDeleteId(sprint.id)}
-                                                        onRemoveTask={() => {}}
-                                                        onTaskPress={openTaskSheet}
-                                                        daysRemaining={null}
-                                                        isAdmin={isAdmin}
-                                                        theme={theme}
-                                                    />
-                                                ))}
-                                            </View>
-                                        )}
-                                    </>
-                                )}
-                            </View>
+                            <SprintsList
+                                sprints={sprints}
+                                activeSprint={activeSprint}
+                                plannedSprints={plannedSprints}
+                                completedSprints={completedSprints}
+                                expandedSprints={expandedSprints}
+                                toggleExpand={toggleExpand}
+                                handleOpenEdit={handleOpenEdit}
+                                setConfirmCompleteId={setConfirmCompleteId}
+                                handleRemoveTaskFromSprint={handleRemoveTaskFromSprint}
+                                openTaskSheet={openTaskSheet}
+                                getDaysRemaining={getDaysRemaining}
+                                isAdmin={isAdmin}
+                                theme={theme}
+                                handleStartSprint={handleStartSprint}
+                                setConfirmDeleteId={setConfirmDeleteId}
+                            />
                         ) : (
-                            <View style={styles.backlogList}>
-                                {backlog.length === 0 ? (
-                                    <View style={styles.emptyState}>
-                                        <IconButton icon="check-all" size={48} iconColor={theme.colors.outline} />
-                                        <Text style={{ color: theme.colors.outline }}>Backlog is Empty!</Text>
-                                        <Text style={{ color: theme.colors.outline, fontSize: 12 }}>All tasks have been assigned to sprints.</Text>
-                                    </View>
-                                ) : (
-                                    backlog.map(task => (
-                                        <Card key={task.id} style={styles.taskCard} onPress={() => openTaskSheet(task)}>
-                                            <Card.Content style={styles.taskCardContent}>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text variant="bodyLarge" style={{ fontWeight: '600' }} numberOfLines={1}>
-                                                        {task.title}
-                                                    </Text>
-                                                    <View style={styles.taskBadges}>
-                                                        {task.projectTag && (
-                                                            <Chip compact textStyle={{ fontSize: 9 }} style={{ backgroundColor: theme.colors.tertiaryContainer }}>
-                                                                📁 {task.projectTag}
-                                                            </Chip>
-                                                        )}
-                                                        <Chip compact textStyle={{ color: '#fff', fontSize: 9 }} style={{ backgroundColor: getPriorityColor(task.priority) }}>
-                                                            {task.priority}
-                                                        </Chip>
-                                                        {task.effortScore !== undefined && task.effortScore !== null && (
-                                                            <Chip compact textStyle={{ fontSize: 9 }} style={{ backgroundColor: theme.colors.primaryContainer }}>
-                                                                {task.effortScore} pts
-                                                            </Chip>
-                                                        )}
-                                                    </View>
-                                                </View>
-
-                                                {/* Assign Task to Sprint Menu Dropdown */}
-                                                {isAdmin && sprints.some(s => s.status !== 'completed') && (
-                                                    <Button
-                                                        mode="text"
-                                                        compact
-                                                        onPress={() => {
-                                                            const nonCompleted = sprints.filter(s => s.status !== 'completed');
-                                                            Alert.alert(
-                                                                'Add to Sprint',
-                                                                'Select target sprint:',
-                                                                nonCompleted.map(s => ({
-                                                                    text: s.name,
-                                                                    onPress: () => handleAddTaskToSprint(s.id, task.id)
-                                                                })).concat({ text: 'Cancel', style: 'cancel' } as any)
-                                                            );
-                                                        }}
-                                                    >
-                                                        + Sprint
-                                                    </Button>
-                                                )}
-                                            </Card.Content>
-                                        </Card>
-                                    ))
-                                )}
-                            </View>
+                            <BacklogList
+                                backlog={backlog}
+                                sprints={sprints}
+                                isAdmin={isAdmin}
+                                theme={theme}
+                                openTaskSheet={openTaskSheet}
+                                handleAddTaskToSprint={handleAddTaskToSprint}
+                            />
                         )}
                     </ScrollView>
                 )}
 
                 {/* FAB to create Sprints */}
                 {isAdmin && activeTab === 'sprints' && (
-                    <FAB
+                    <PaperFAB
                         style={styles.fab}
                         icon="plus"
                         onPress={handleOpenCreate}
@@ -409,107 +305,33 @@ const SprintPlanningScreen = () => {
                 )}
 
                 {/* Portal items */}
-                <Portal>
-                    {/* Create/Edit Sprint Modal */}
-                    <Modal visible={modalVisible} onDismiss={() => setModalVisible(false)} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
-                        <Text variant="titleLarge" style={{ marginBottom: 15 }}>
-                            {editingSprint ? 'Edit Sprint' : 'Create New Sprint'}
-                        </Text>
-                        <TextInput
-                            label="Sprint Name *"
-                            value={formName}
-                            onChangeText={setFormName}
-                            style={[styles.input, { backgroundColor: theme.colors.surface }]}
-                        />
-                        <TextInput
-                            label="Sprint Goal"
-                            value={formGoal}
-                            onChangeText={setFormGoal}
-                            multiline
-                            numberOfLines={3}
-                            style={[styles.input, { minHeight: 60, backgroundColor: theme.colors.surface }]}
-                        />
-                        <TouchableOpacity onPress={() => setShowStartPicker(true)}>
-                            <View pointerEvents="none">
-                                <TextInput
-                                    label="Start Date"
-                                    value={formStartDate}
-                                    editable={false}
-                                    placeholder="YYYY-MM-DD"
-                                    right={<TextInput.Icon icon="calendar" />}
-                                    style={[styles.input, { backgroundColor: theme.colors.surface }]}
-                                />
-                            </View>
-                        </TouchableOpacity>
-                        {showStartPicker && (
-                            <DateTimePicker
-                                value={formStartDate ? new Date(formStartDate) : new Date()}
-                                mode="date"
-                                display="default"
-                                onChange={(event, date) => {
-                                    setShowStartPicker(false);
-                                    if (date) {
-                                        setFormStartDate(date.toISOString().split('T')[0]);
-                                    }
-                                }}
-                            />
-                        )}
-
-                        <TouchableOpacity onPress={() => setShowEndPicker(true)}>
-                            <View pointerEvents="none">
-                                <TextInput
-                                    label="End Date"
-                                    value={formEndDate}
-                                    editable={false}
-                                    placeholder="YYYY-MM-DD"
-                                    right={<TextInput.Icon icon="calendar" />}
-                                    style={[styles.input, { backgroundColor: theme.colors.surface }]}
-                                />
-                            </View>
-                        </TouchableOpacity>
-                        {showEndPicker && (
-                            <DateTimePicker
-                                value={formEndDate ? new Date(formEndDate) : new Date()}
-                                mode="date"
-                                display="default"
-                                onChange={(event, date) => {
-                                    setShowEndPicker(false);
-                                    if (date) {
-                                        setFormEndDate(date.toISOString().split('T')[0]);
-                                    }
-                                }}
-                            />
-                        )}
-
-                        <Button mode="contained" onPress={handleSaveSprint} loading={isCreating || isUpdating} style={styles.saveBtn}>
-                            {editingSprint ? 'Save Changes' : 'Create Sprint'}
-                        </Button>
-                    </Modal>
-
-                    {/* Sprint Completion Confirmation Dialog */}
-                    <Dialog visible={confirmCompleteId !== null} onDismiss={() => setConfirmCompleteId(null)} style={{ backgroundColor: theme.colors.surface }}>
-                        <Dialog.Title>Complete Sprint?</Dialog.Title>
-                        <Dialog.Content>
-                            <Text>Are you sure you want to complete this sprint? All unfinished tasks will be returned to the product backlog.</Text>
-                        </Dialog.Content>
-                        <Dialog.Actions>
-                            <Button onPress={() => setConfirmCompleteId(null)}>Cancel</Button>
-                            <Button onPress={handleCompleteSprint} textColor="green">Complete</Button>
-                        </Dialog.Actions>
-                    </Dialog>
-
-                    {/* Sprint Deletion Confirmation Dialog */}
-                    <Dialog visible={confirmDeleteId !== null} onDismiss={() => setConfirmDeleteId(null)} style={{ backgroundColor: theme.colors.surface }}>
-                        <Dialog.Title>Delete Sprint?</Dialog.Title>
-                        <Dialog.Content>
-                            <Text>Are you sure you want to delete this sprint? All tasks inside will be returned to the backlog.</Text>
-                        </Dialog.Content>
-                        <Dialog.Actions>
-                            <Button onPress={() => setConfirmDeleteId(null)}>Cancel</Button>
-                            <Button onPress={handleDeleteSprint} textColor="red">Delete</Button>
-                        </Dialog.Actions>
-                    </Dialog>
-                </Portal>
+                <SprintPlanningModals
+                    theme={theme}
+                    modalVisible={modalVisible}
+                    setModalVisible={setModalVisible}
+                    editingSprint={editingSprint}
+                    formName={formName}
+                    setFormName={setFormName}
+                    formGoal={formGoal}
+                    setFormGoal={setFormGoal}
+                    formStartDate={formStartDate}
+                    setFormStartDate={setFormStartDate}
+                    formEndDate={formEndDate}
+                    setFormEndDate={setFormEndDate}
+                    showStartPicker={showStartPicker}
+                    setShowStartPicker={setShowStartPicker}
+                    showEndPicker={showEndPicker}
+                    setShowEndPicker={setShowEndPicker}
+                    isCreating={isCreating}
+                    isUpdating={isUpdating}
+                    handleSaveSprint={handleSaveSprint}
+                    confirmCompleteId={confirmCompleteId}
+                    setConfirmCompleteId={setConfirmCompleteId}
+                    handleCompleteSprint={handleCompleteSprint}
+                    confirmDeleteId={confirmDeleteId}
+                    setConfirmDeleteId={setConfirmDeleteId}
+                    handleDeleteSprint={handleDeleteSprint}
+                />
             </View>
 
             {/* Task Detail Sheet */}
@@ -527,6 +349,360 @@ const SprintPlanningScreen = () => {
                 }}
             />
         </GestureHandlerRootView>
+    );
+};
+
+// ── BacklogList Helper Component ──────────────────────────────────────────────
+interface BacklogListProps {
+    backlog: any[];
+    sprints: Sprint[];
+    isAdmin: boolean;
+    theme: any;
+    openTaskSheet: (task: any) => void;
+    handleAddTaskToSprint: (sprintId: string, taskId: string) => void;
+}
+
+const BacklogList = ({
+    backlog,
+    sprints,
+    isAdmin,
+    theme,
+    openTaskSheet,
+    handleAddTaskToSprint,
+}: BacklogListProps) => {
+    if (backlog.length === 0) {
+        return (
+            <View style={styles.emptyState}>
+                <IconButton icon="check-all" size={48} iconColor={theme.colors.outline} />
+                <Text style={{ color: theme.colors.outline }}>Backlog is Empty!</Text>
+                <Text style={{ color: theme.colors.outline, fontSize: 12 }}>All tasks have been assigned to sprints.</Text>
+            </View>
+        );
+    }
+
+    const showSprintSelectionAlert = (task: any) => {
+        const nonCompleted = sprints.filter(s => s.status !== 'completed');
+        Alert.alert(
+            'Add to Sprint',
+            'Select target sprint:',
+            nonCompleted.map(s => ({
+                text: s.name,
+                onPress: () => handleAddTaskToSprint(s.id, task.id)
+            })).concat({ text: 'Cancel', style: 'cancel' } as any)
+        );
+    };
+
+    return (
+        <View style={styles.backlogList}>
+            {backlog.map(task => (
+                <Card key={task.id} style={styles.taskCard} onPress={() => openTaskSheet(task)}>
+                    <Card.Content style={styles.taskCardContent}>
+                        <View style={{ flex: 1 }}>
+                            <Text variant="bodyLarge" style={{ fontWeight: '600' }} numberOfLines={1}>
+                                {task.title}
+                            </Text>
+                            <View style={styles.taskBadges}>
+                                {task.projectTag && (
+                                    <Chip compact textStyle={{ fontSize: 9 }} style={{ backgroundColor: theme.colors.tertiaryContainer }}>
+                                        📁 {task.projectTag}
+                                    </Chip>
+                                )}
+                                <Chip compact textStyle={{ color: '#fff', fontSize: 9 }} style={{ backgroundColor: getPriorityColor(task.priority) }}>
+                                    {task.priority}
+                                </Chip>
+                                {task.effortScore !== undefined && task.effortScore !== null && (
+                                    <Chip compact textStyle={{ fontSize: 9 }} style={{ backgroundColor: theme.colors.primaryContainer }}>
+                                        {task.effortScore} pts
+                                    </Chip>
+                                )}
+                            </View>
+                        </View>
+
+                        {/* Assign Task to Sprint Menu Dropdown */}
+                        {isAdmin && sprints.some(s => s.status !== 'completed') && (
+                            <Button
+                                mode="text"
+                                compact
+                                onPress={() => showSprintSelectionAlert(task)}
+                            >
+                                + Sprint
+                            </Button>
+                        )}
+                    </Card.Content>
+                </Card>
+            ))}
+        </View>
+    );
+};
+
+// ── SprintsList Helper Component ──────────────────────────────────────────────
+interface SprintsListProps {
+    sprints: Sprint[];
+    activeSprint?: Sprint;
+    plannedSprints: Sprint[];
+    completedSprints: Sprint[];
+    expandedSprints: Set<string>;
+    toggleExpand: (id: string) => void;
+    handleOpenEdit: (sprint: Sprint) => void;
+    setConfirmCompleteId: (id: string) => void;
+    handleRemoveTaskFromSprint: (sprintId: string, taskId: string) => void;
+    openTaskSheet: (task: any) => void;
+    getDaysRemaining: (endDateStr: string) => number | null;
+    isAdmin: boolean;
+    theme: any;
+    handleStartSprint: (sprintId: string) => void;
+    setConfirmDeleteId: (id: string) => void;
+}
+
+const SprintsList = ({
+    sprints,
+    activeSprint,
+    plannedSprints,
+    completedSprints,
+    expandedSprints,
+    toggleExpand,
+    handleOpenEdit,
+    setConfirmCompleteId,
+    handleRemoveTaskFromSprint,
+    openTaskSheet,
+    getDaysRemaining,
+    isAdmin,
+    theme,
+    handleStartSprint,
+    setConfirmDeleteId,
+}: SprintsListProps) => {
+    if (sprints.length === 0) {
+        return (
+            <View style={styles.emptyState}>
+                <IconButton icon="calendar-sync-outline" size={48} iconColor={theme.colors.outline} />
+                <Text style={{ color: theme.colors.outline }}>No Sprints Created Yet</Text>
+            </View>
+        );
+    }
+
+    return (
+        <View style={styles.sprintsList}>
+            {/* Active Sprint Section */}
+            {activeSprint && (
+                <SprintCard
+                    sprint={activeSprint}
+                    expanded={expandedSprints.has(activeSprint.id)}
+                    onToggle={() => toggleExpand(activeSprint.id)}
+                    onEdit={() => handleOpenEdit(activeSprint)}
+                    onComplete={() => setConfirmCompleteId(activeSprint.id)}
+                    onRemoveTask={(taskId) => handleRemoveTaskFromSprint(activeSprint.id, taskId)}
+                    onTaskPress={openTaskSheet}
+                    daysRemaining={activeSprint.endDate ? getDaysRemaining(activeSprint.endDate) : null}
+                    isAdmin={isAdmin}
+                    theme={theme}
+                />
+            )}
+
+            {/* Planned Sprints */}
+            {plannedSprints.length > 0 && (
+                <View style={styles.sectionContainer}>
+                    <Text variant="titleSmall" style={[styles.sectionHeader, { color: theme.colors.outline }]}>PLANNED SPRINTS</Text>
+                    {plannedSprints.map(sprint => (
+                        <SprintCard
+                            key={sprint.id}
+                            sprint={sprint}
+                            expanded={expandedSprints.has(sprint.id)}
+                            onToggle={() => toggleExpand(sprint.id)}
+                            onEdit={() => handleOpenEdit(sprint)}
+                            onStart={() => handleStartSprint(sprint.id)}
+                            onDelete={() => setConfirmDeleteId(sprint.id)}
+                            onRemoveTask={(taskId) => handleRemoveTaskFromSprint(sprint.id, taskId)}
+                            onTaskPress={openTaskSheet}
+                            daysRemaining={null}
+                            isAdmin={isAdmin}
+                            theme={theme}
+                        />
+                    ))}
+                </View>
+            )}
+
+            {/* Completed Sprints */}
+            {completedSprints.length > 0 && (
+                <View style={styles.sectionContainer}>
+                    <Text variant="titleSmall" style={[styles.sectionHeader, { color: theme.colors.outline }]}>COMPLETED SPRINTS</Text>
+                    {completedSprints.map(sprint => (
+                        <SprintCard
+                            key={sprint.id}
+                            sprint={sprint}
+                            expanded={expandedSprints.has(sprint.id)}
+                            onToggle={() => toggleExpand(sprint.id)}
+                            onDelete={() => setConfirmDeleteId(sprint.id)}
+                            onRemoveTask={() => {}}
+                            onTaskPress={openTaskSheet}
+                            daysRemaining={null}
+                            isAdmin={isAdmin}
+                            theme={theme}
+                        />
+                    ))}
+                </View>
+            )}
+        </View>
+    );
+};
+
+// ── SprintPlanningModals Helper Component ─────────────────────────────────────
+interface SprintPlanningModalsProps {
+    theme: any;
+    modalVisible: boolean;
+    setModalVisible: (v: boolean) => void;
+    editingSprint: Sprint | null;
+    formName: string;
+    setFormName: (n: string) => void;
+    formGoal: string;
+    setFormGoal: (g: string) => void;
+    formStartDate: string;
+    setFormStartDate: (d: string) => void;
+    formEndDate: string;
+    setFormEndDate: (d: string) => void;
+    showStartPicker: boolean;
+    setShowStartPicker: (b: boolean) => void;
+    showEndPicker: boolean;
+    setShowEndPicker: (b: boolean) => void;
+    isCreating: boolean;
+    isUpdating: boolean;
+    handleSaveSprint: () => void;
+    confirmCompleteId: string | null;
+    setConfirmCompleteId: (id: string | null) => void;
+    handleCompleteSprint: () => void;
+    confirmDeleteId: string | null;
+    setConfirmDeleteId: (id: string | null) => void;
+    handleDeleteSprint: () => void;
+}
+
+const SprintPlanningModals = ({
+    theme,
+    modalVisible,
+    setModalVisible,
+    editingSprint,
+    formName,
+    setFormName,
+    formGoal,
+    setFormGoal,
+    formStartDate,
+    setFormStartDate,
+    formEndDate,
+    setFormEndDate,
+    showStartPicker,
+    setShowStartPicker,
+    showEndPicker,
+    setShowEndPicker,
+    isCreating,
+    isUpdating,
+    handleSaveSprint,
+    confirmCompleteId,
+    setConfirmCompleteId,
+    handleCompleteSprint,
+    confirmDeleteId,
+    setConfirmDeleteId,
+    handleDeleteSprint,
+}: SprintPlanningModalsProps) => {
+    return (
+        <Portal>
+            {/* Create/Edit Sprint Modal */}
+            <Modal visible={modalVisible} onDismiss={() => setModalVisible(false)} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
+                <Text variant="titleLarge" style={{ marginBottom: 15 }}>
+                    {editingSprint ? 'Edit Sprint' : 'Create New Sprint'}
+                </Text>
+                <TextInput
+                    label="Sprint Name *"
+                    value={formName}
+                    onChangeText={setFormName}
+                    style={[styles.input, { backgroundColor: theme.colors.surface }]}
+                />
+                <TextInput
+                    label="Sprint Goal"
+                    value={formGoal}
+                    onChangeText={setFormGoal}
+                    multiline
+                    numberOfLines={3}
+                    style={[styles.input, { minHeight: 60, backgroundColor: theme.colors.surface }]}
+                />
+                <TouchableOpacity onPress={() => setShowStartPicker(true)}>
+                    <View pointerEvents="none">
+                        <TextInput
+                            label="Start Date"
+                            value={formStartDate}
+                            editable={false}
+                            placeholder="YYYY-MM-DD"
+                            right={<TextInput.Icon icon="calendar" />}
+                            style={[styles.input, { backgroundColor: theme.colors.surface }]}
+                        />
+                    </View>
+                </TouchableOpacity>
+                {showStartPicker && (
+                    <DateTimePicker
+                        value={formStartDate ? new Date(formStartDate) : new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={(event, date) => {
+                            setShowStartPicker(false);
+                            if (date) {
+                                setFormStartDate(date.toISOString().split('T')[0]);
+                            }
+                        }}
+                    />
+                )}
+
+                <TouchableOpacity onPress={() => setShowEndPicker(true)}>
+                    <View pointerEvents="none">
+                        <TextInput
+                            label="End Date"
+                            value={formEndDate}
+                            editable={false}
+                            placeholder="YYYY-MM-DD"
+                            right={<TextInput.Icon icon="calendar" />}
+                            style={[styles.input, { backgroundColor: theme.colors.surface }]}
+                        />
+                    </View>
+                </TouchableOpacity>
+                {showEndPicker && (
+                    <DateTimePicker
+                        value={formEndDate ? new Date(formEndDate) : new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={(event, date) => {
+                            setShowEndPicker(false);
+                            if (date) {
+                                setFormEndDate(date.toISOString().split('T')[0]);
+                            }
+                        }}
+                    />
+                )}
+
+                <Button mode="contained" onPress={handleSaveSprint} loading={isCreating || isUpdating} style={styles.saveBtn}>
+                    {editingSprint ? 'Save Changes' : 'Create Sprint'}
+                </Button>
+            </Modal>
+
+            {/* Sprint Completion Confirmation Dialog */}
+            <Dialog visible={confirmCompleteId !== null} onDismiss={() => setConfirmCompleteId(null)} style={{ backgroundColor: theme.colors.surface }}>
+                <Dialog.Title>Complete Sprint?</Dialog.Title>
+                <Dialog.Content>
+                    <Text>Are you sure you want to complete this sprint? All unfinished tasks will be returned to the product backlog.</Text>
+                </Dialog.Content>
+                <Dialog.Actions>
+                    <Button onPress={() => setConfirmCompleteId(null)}>Cancel</Button>
+                    <Button onPress={handleCompleteSprint} textColor="green">Complete</Button>
+                </Dialog.Actions>
+            </Dialog>
+
+            {/* Sprint Deletion Confirmation Dialog */}
+            <Dialog visible={confirmDeleteId !== null} onDismiss={() => setConfirmDeleteId(null)} style={{ backgroundColor: theme.colors.surface }}>
+                <Dialog.Title>Delete Sprint?</Dialog.Title>
+                <Dialog.Content>
+                    <Text>Are you sure you want to delete this sprint? All tasks inside will be returned to the backlog.</Text>
+                </Dialog.Content>
+                <Dialog.Actions>
+                    <Button onPress={() => setConfirmDeleteId(null)}>Cancel</Button>
+                    <Button onPress={handleDeleteSprint} textColor="red">Delete</Button>
+                </Dialog.Actions>
+            </Dialog>
+        </Portal>
     );
 };
 
