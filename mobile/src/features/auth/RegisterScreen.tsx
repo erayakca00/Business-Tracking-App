@@ -23,8 +23,12 @@ const RegisterScreen = () => {
 
     const onSubmit = async (data: any) => {
         try {
-            const userData = await register(data).unwrap();
-            dispatch(setCredentials({ user: userData.user, token: userData.access_token }));
+            const response = await register(data).unwrap();
+            Alert.alert(
+                'Registration Successful',
+                response.message || 'Please check your email to verify your account before logging in.',
+                [{ text: 'OK', onPress: () => navigation.navigate('Login' as never) }]
+            );
         } catch (err: any) {
             // RTK Query error handling
             const message = Array.isArray(err.data?.message)

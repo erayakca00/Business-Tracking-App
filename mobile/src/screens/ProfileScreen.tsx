@@ -161,6 +161,7 @@ const styles = StyleSheet.create({
     header: {
         alignItems: 'center',
         padding: 30,
+        paddingTop: 54,
         // backgroundColor removed, set dynamically
     },
     avatar: {

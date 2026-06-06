@@ -12,7 +12,6 @@ interface CreateTaskModalProps {
     members: any[];
     isAdmin: boolean;
     currentUserId?: string;
-    existingTags?: string[];
     allTasks?: any[];
     sprints?: any[];
     activeSprint?: any;
@@ -27,7 +26,6 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     members,
     isAdmin,
     currentUserId,
-    existingTags = [],
     allTasks = [],
     sprints = [],
     activeSprint,
@@ -45,6 +43,24 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     const [dependsOnId, setDependsOnId] = useState<string | null>(null);
     const [sprintId, setSprintId] = useState<string | ''>('');
     const [isLoading, setIsLoading] = useState(false);
+    const [dateError, setDateError] = useState<string>('');
+    const [templates, setTemplates] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (isOpen && !taskToEdit) {
+            const fetchTemplates = async () => {
+                try {
+                    const res = await api.get(`/groups/${groupId}/templates`);
+                    setTemplates(res.data);
+                } catch (err) {
+                    console.error('Failed to fetch templates', err);
+                }
+            };
+            fetchTemplates();
+        } else {
+            setTemplates([]);
+        }
+    }, [isOpen, groupId, taskToEdit]);
 
     // Derived combined tag value, e.g. "PRO-1"
     const projectTag = tagPrefix.length === 3 && tagNumber ? `${tagPrefix}-${tagNumber}` : undefined;
@@ -86,8 +102,16 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             setPriority(taskToEdit.priority);
             setEffort(taskToEdit.effort || null);
             setAssignedTo(taskToEdit.assignedToId || '');
-            // Format date for input
-            setDueDate(taskToEdit.dueDate ? new Date(taskToEdit.dueDate).toISOString().substring(0, 10) : '');
+            // Format date for input (YYYY-MM-DDTHH:mm)
+            if (taskToEdit.dueDate) {
+                const dateObj = new Date(taskToEdit.dueDate);
+                // Adjust for local timezone to show correct local time
+                const tzOffset = dateObj.getTimezoneOffset() * 60000;
+                const localISOTime = (new Date(dateObj.getTime() - tzOffset)).toISOString().slice(0, 16);
+                setDueDate(localISOTime);
+            } else {
+                setDueDate('');
+            }
             setDependsOnId(taskToEdit.dependsOnId || null);
             setSprintId(taskToEdit.sprintId || '');
             if (taskToEdit.projectTag) {
@@ -109,9 +133,78 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
         }
     }, [taskToEdit, isOpen]);
 
+    useEffect(() => {
+        if (!dueDate) {
+            setDateError('');
+            return;
+        }
+
+        const selectedDate = new Date(dueDate);
+        const now = new Date();
+        
+        let error = '';
+        // If it's a new task, or if the due date was modified to be in the past
+        // Actually, we should check if selected is behind current time
+        // But only if it's new or they explicitly changed it?
+        // To be safe, we just validate it against `now`
+        
+        if (selectedDate < now && (!taskToEdit || new Date(taskToEdit.dueDate) < selectedDate || dueDate !== (taskToEdit.dueDate ? new Date(new Date(taskToEdit.dueDate).getTime() - new Date(taskToEdit.dueDate).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''))) {
+            error = 'Tarih ve saat şu anki zamanın gerisinde olamaz.';
+        } else if (sprintId) {
+            const sprint = sprints.find(s => s.id === sprintId);
+            if (sprint) {
+                if (sprint.startDate) {
+                    const sStart = new Date(sprint.startDate);
+                    sStart.setHours(0, 0, 0, 0);
+                    if (selectedDate < sStart) {
+                        error = `Tarih ve saat sprint başlangıcından (${sStart.toLocaleDateString()}) önce olamaz.`;
+                    }
+                }
+                if (sprint.endDate && !error) {
+                    const sEnd = new Date(sprint.endDate);
+                    sEnd.setHours(23, 59, 59, 999);
+                    if (selectedDate > sEnd) {
+                        error = `Tarih ve saat sprint bitişinden (${sEnd.toLocaleDateString()}) sonra olamaz.`;
+                    }
+                }
+            }
+        }
+        
+        setDateError(error);
+    }, [dueDate, sprintId, sprints, taskToEdit]);
+
+    const handleSelectTemplate = (templateId: string) => {
+        if (!templateId) return;
+        const selected = templates.find(t => t.id === templateId);
+        if (selected) {
+            if (selected.title) setTitle(selected.title);
+            if (selected.description) setDescription(selected.description);
+            if (selected.priority) setPriority(selected.priority);
+            if (selected.effort !== undefined && selected.effort !== null) setEffort(selected.effort);
+            
+            if (selected.projectTag) {
+                const parts = selected.projectTag.split('-');
+                if (parts.length === 2) {
+                    setTagPrefix(parts[0]);
+                    setTagNumber(parts[1]);
+                } else {
+                    setTagPrefix(selected.projectTag);
+                    setTagNumber('');
+                }
+            } else {
+                setTagPrefix('');
+                setTagNumber('');
+            }
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!canEdit) return;
+        if (dateError) {
+            alert(dateError);
+            return;
+        }
 
         setIsLoading(true);
         try {
@@ -168,6 +261,20 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </button>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {!taskToEdit && templates.length > 0 && (
+                        <div>
+                            <label className="block text-sm font-medium text-indigo-600 dark:text-indigo-400">Start from Template</label>
+                            <select
+                                onChange={(e) => handleSelectTemplate(e.target.value)}
+                                className="mt-1 block w-full rounded-lg border border-indigo-200 dark:border-indigo-800 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 bg-indigo-50 dark:bg-gray-900 text-indigo-900 dark:text-indigo-200 transition-colors text-sm"
+                            >
+                                <option className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white" value="">Select a template...</option>
+                                {templates.map((t: any) => (
+                                    <option className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white" key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
                         <input
@@ -260,14 +367,40 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deadline</label>
-                        <input
-                            type="datetime-local"
-                            value={dueDate}
-                            onChange={(e) => setDueDate(e.target.value)}
-                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
-                            disabled={!canEdit}
-                        />
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Deadline</label>
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <label className="block text-xs text-gray-500 mb-1">Tarih (Klavye ile girilebilir)</label>
+                                <input
+                                    type="date"
+                                    value={dueDate ? dueDate.substring(0, 10) : ''}
+                                    onChange={(e) => {
+                                        const dateVal = e.target.value;
+                                        const timeVal = dueDate && dueDate.includes('T') ? dueDate.substring(11, 16) : '23:59';
+                                        setDueDate(dateVal ? `${dateVal}T${timeVal}` : '');
+                                    }}
+                                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                                    disabled={!canEdit}
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-xs text-gray-500 mb-1">Saat (Klavye ile girilebilir)</label>
+                                <input
+                                    type="time"
+                                    value={dueDate && dueDate.includes('T') ? dueDate.substring(11, 16) : ''}
+                                    onChange={(e) => {
+                                        const timeVal = e.target.value;
+                                        const dateVal = dueDate ? dueDate.substring(0, 10) : new Date().toISOString().substring(0, 10);
+                                        setDueDate(timeVal ? `${dateVal}T${timeVal}` : dateVal ? `${dateVal}T00:00` : '');
+                                    }}
+                                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                                    disabled={!canEdit}
+                                />
+                            </div>
+                        </div>
+                        {dateError && (
+                            <p className="text-xs text-red-500 mt-1">{dateError}</p>
+                        )}
                     </div>
 
                     <div>

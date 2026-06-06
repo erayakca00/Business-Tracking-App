@@ -1,37 +1,47 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('notifications')
 export class Notification {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column()
-    userId: string; // The user receiving the notification
+  @Index()
+  @Column()
+  userId: string; // The user receiving the notification
 
-    @ManyToOne(() => User)
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column({ nullable: true })
-    actorId: string; // The user who triggered the notification
+  @Column({ nullable: true })
+  actorId: string; // The user who triggered the notification
 
-    @ManyToOne(() => User)
-    @JoinColumn({ name: 'actorId' })
-    actor: User;
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'actorId' })
+  actor: User;
 
-    @Column()
-    type: string; // e.g., 'mention', 'assigned', 'task_completed'
+  @Column()
+  type: string; // e.g., 'mention', 'assigned', 'task_completed'
 
-    @Column()
-    message: string;
+  @Column()
+  message: string;
 
-    @Column({ nullable: true })
-    taskId: string;
+  @Column({ nullable: true })
+  taskId: string;
 
-    @Column({ default: false })
-    isRead: boolean;
+  @Index()
+  @Column({ default: false })
+  isRead: boolean;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 }

@@ -6,13 +6,16 @@ import { Group } from '../database/entities/group.entity';
 import { UserGroup } from '../database/entities/user-group.entity';
 import { UsersModule } from '../users/users.module';
 import { Task } from '../database/entities/task.entity';
+import { TimeLog } from '../database/entities/time-log.entity';
+import { SprintsModule } from '../sprints/sprints.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Group, UserGroup, Task]),
+    TypeOrmModule.forFeature([Group, UserGroup, Task, TimeLog]),
     UsersModule,
+    SprintsModule,
   ],
   controllers: [GroupsController],
   providers: [GroupsService],
 })
-export class GroupsModule { }
+export class GroupsModule {}

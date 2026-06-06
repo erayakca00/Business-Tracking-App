@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, LayoutGrid, List as ListIcon, ArrowLeft, Settings, Zap } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, ArrowLeft, Settings, Zap, BarChart3 } from 'lucide-react';
 import api from '../services/api';
 import CreateTaskModal from '../components/CreateTaskModal';
 import GroupSettingsModal from '../components/GroupSettingsModal';
@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import TaskBoard from '../components/TaskBoard';
 import TaskList from '../components/TaskList';
 import NotificationBell from '../components/NotificationBell';
+import { useSocket } from '../hooks/useSocket';
 
 /**
  * GroupDetails Component
@@ -32,6 +33,40 @@ const GroupDetails = () => {
     const [sprints, setSprints] = useState<any[]>([]);
     const [members, setMembers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    const { socket, connected } = useSocket(groupId);
+
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleTaskCreated = (newTask: any) => {
+            setTasks((prev: any[]) => {
+                if (prev.some(t => t.id === newTask.id)) return prev;
+                return [newTask, ...prev];
+            });
+        };
+
+        const handleTaskUpdated = (updatedTask: any) => {
+            setTasks((prev: any[]) => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+            setSelectedTask((prev: any) => prev && prev.id === updatedTask.id ? updatedTask : prev);
+        };
+
+        const handleTaskDeleted = (data: { taskId: string }) => {
+            setTasks((prev: any[]) => prev.filter(t => t.id !== data.taskId));
+            setSelectedTask((prev: any) => prev && prev.id === data.taskId ? null : prev);
+        };
+
+        socket.on('task:created', handleTaskCreated);
+        socket.on('task:updated', handleTaskUpdated);
+        socket.on('task:deleted', handleTaskDeleted);
+
+        return () => {
+            socket.off('task:created', handleTaskCreated);
+            socket.off('task:updated', handleTaskUpdated);
+            socket.off('task:deleted', handleTaskDeleted);
+        };
+    }, [socket]);
+
     const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
     const [sprintFilter, setSprintFilter] = useState<'active' | 'backlog' | 'all'>('active');
 
@@ -63,8 +98,13 @@ const GroupDetails = () => {
             if (!hasActive && sprintFilter === 'active') {
                 setSprintFilter('all');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to fetch group details', error);
+            if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                navigate('/login');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -137,14 +177,18 @@ const GroupDetails = () => {
     const completedSprintIds = useMemo(() => new Set(sprints.filter(s => s.status === 'completed').map(s => s.id)), [sprints]);
 
     const filteredTasks = useMemo(() => {
-        // Always exclude tasks from completed sprints — they belong to past work
-        let base = tasks.filter((t: any) => !t.sprintId || !completedSprintIds.has(t.sprintId));
+        let base = [...tasks];
 
-        if (sprintFilter === 'active' && activeSprint) {
-            base = base.filter((t: any) => t.sprintId === activeSprint.id);
+        if (sprintFilter === 'active') {
+            if (activeSprint) {
+                base = base.filter((t: any) => t.sprintId === activeSprint.id);
+            } else {
+                base = [];
+            }
         } else if (sprintFilter === 'backlog') {
             base = base.filter((t: any) => t.sprintId === null);
         }
+        // If sprintFilter === 'all', base retains all tasks including completed sprint tasks.
 
         if (tagFilter) {
             base = base.filter((t: any) => t.projectTag === tagFilter);
@@ -175,7 +219,7 @@ const GroupDetails = () => {
 
     // Tags scoped to the currently visible tasks (sprint-aware)
     const uniqueTags = useMemo(() =>
-        Array.from(new Set(filteredTasks.map((t: any) => t.projectTag).filter(Boolean))),
+        Array.from(new Set(filteredTasks.map((t: any) => t.projectTag).filter(Boolean))).sort() as string[],
         [filteredTasks]
     );
 
@@ -204,7 +248,7 @@ const GroupDetails = () => {
         <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 transition-colors duration-200 overflow-hidden">
             {/* Header */}
             <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex-shrink-0 z-10 shadow-sm transition-colors duration-200">
-                <div className="flex justify-between items-center max-w-7xl mx-auto w-full">
+                <div className="flex justify-between items-center max-w-[98%] mx-auto w-full">
                     <div className="flex items-center">
                         <Link to="/dashboard" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors mr-3 flex-shrink-0 self-center">
                             <ArrowLeft size={24} className="text-gray-600 dark:text-gray-300" />
@@ -218,6 +262,17 @@ const GroupDetails = () => {
                                 {isAdmin && (
                                     <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 text-[10px] font-bold rounded uppercase">
                                         Admin
+                                    </span>
+                                )}
+                                {connected ? (
+                                    <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold rounded uppercase tracking-wider flex items-center gap-1">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        Live Sync
+                                    </span>
+                                ) : (
+                                    <span className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded uppercase tracking-wider flex items-center gap-1">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                                        Offline
                                     </span>
                                 )}
                             </div>
@@ -245,7 +300,7 @@ const GroupDetails = () => {
 
             {/* Main Content */}
             <div className="flex-1 overflow-hidden relative">
-                <main className="h-full w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
+                <main className="h-full w-full max-w-[98%] mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
                     {/* Toolbar */}
                     <div className="mb-6 flex justify-between items-center flex-shrink-0">
                         <div className="flex items-center space-x-4 bg-white dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm transition-colors duration-200">
@@ -266,6 +321,13 @@ const GroupDetails = () => {
                         </div>
 
                         <div className="flex items-center space-x-3">
+                            <Link
+                                to={`/groups/${groupId}/analytics`}
+                                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-colors"
+                            >
+                                <BarChart3 size={15} />
+                                Analytics
+                            </Link>
                             {isAdmin && (
                                 <Link
                                     to={`/groups/${groupId}/sprints`}
@@ -340,29 +402,19 @@ const GroupDetails = () => {
 
                         {/* Tag Filters */}
                         {(uniqueTags.length > 0) && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <button
-                                    onClick={() => { setTagFilter(null); }}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${(tagFilter === null)
-                                        ? 'bg-indigo-600 text-white shadow-sm'
-                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                        }`}
+                            <div className="flex items-center gap-2">
+                                <label htmlFor="tag-filter" className="text-xs font-medium text-gray-500 dark:text-gray-400">Tag:</label>
+                                <select
+                                    id="tag-filter"
+                                    value={tagFilter || ''}
+                                    onChange={(e) => setTagFilter(e.target.value || null)}
+                                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 transition-colors"
                                 >
-                                    All
-                                </button>
-
-                                {uniqueTags.map((tag: any) => (
-                                    <button
-                                        key={tag}
-                                        onClick={() => { setTagFilter(tagFilter === tag ? null : tag); }}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tagFilter === tag
-                                            ? 'bg-indigo-600 text-white shadow-sm'
-                                            : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
-                                            }`}
-                                    >
-                                        📁 {tag}
-                                    </button>
-                                ))}
+                                    <option value="">All Tags</option>
+                                    {uniqueTags.map((tag: any) => (
+                                        <option key={tag} value={tag}>📁 {tag}</option>
+                                    ))}
+                                </select>
                             </div>
                         )}
                         <span className="text-xs text-gray-400 dark:text-gray-500 mt-2 sm:mt-0 sm:ml-auto self-center">
@@ -468,7 +520,6 @@ const GroupDetails = () => {
                 members={members}
                 isAdmin={isAdmin}
                 currentUserId={user?.id}
-                existingTags={uniqueTags as string[]}
                 allTasks={tasks.filter((t: any) => !t.sprintId || !completedSprintIds.has(t.sprintId))}
                 sprints={sprints.filter(s => s.status !== 'completed')}
                 activeSprint={activeSprint}
@@ -495,6 +546,7 @@ const GroupDetails = () => {
                 onEdit={(task) => { setSelectedTask(null); handleEditTask(task); }}
                 onDelete={async (taskId) => { await handleDeleteTask(taskId); setSelectedTask(null); }}
                 onTaskUpdated={fetchData}
+                socket={socket}
             />
         </div>
     );

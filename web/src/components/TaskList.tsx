@@ -16,6 +16,8 @@ interface Task {
     projectTag?: string;
     dependsOnId?: string | null;
     dependsOn?: { title: string };
+    blockedBy?: Task[];
+    blocking?: Task[];
 }
 
 interface Member {
@@ -76,11 +78,11 @@ const TaskList: React.FC<TaskListProps> = ({
         <div className="flex-1 flex flex-col min-h-0">
 
 
-            <div className="flex-1 overflow-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10 transition-colors duration-200">
                         <tr>
-                            <th scope="col" className="px-6 py-3 text-left">
+                            <th scope="col" className="px-3 py-3 text-left">
                                 <input
                                     type="checkbox"
                                     checked={selectedTaskIds.length === tasks.length && tasks.length > 0}
@@ -88,19 +90,19 @@ const TaskList: React.FC<TaskListProps> = ({
                                     className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 bg-white dark:bg-gray-800 transition-colors"
                                 />
                             </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('title')}>
+                            <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('title')}>
                                 <div className="flex items-center gap-1">Title {sortBy === 'title' && (sortDir === 'asc' ? '↑' : '↓')}</div>
                             </th>
-                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('tag')}>
+                            <th scope="col" className="px-2 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('tag')}>
                                 <div className="flex items-center gap-1">Tag {sortBy === 'tag' && (sortDir === 'asc' ? '↑' : '↓')}</div>
                             </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('status')}>
+                            <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('status')}>
                                 <div className="flex items-center gap-1">Status {sortBy === 'status' && (sortDir === 'asc' ? '↑' : '↓')}</div>
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('priority')}>
                                 <div className="flex items-center gap-1">Priority {sortBy === 'priority' && (sortDir === 'asc' ? '↑' : '↓')}</div>
                             </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                 Assigned To
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('createdAt')}>
@@ -112,7 +114,7 @@ const TaskList: React.FC<TaskListProps> = ({
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => onSortChange('dueDate')}>
                                 <div className="flex items-center gap-1">Due {sortBy === 'dueDate' && (sortDir === 'asc' ? '↑' : '↓')}</div>
                             </th>
-                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                            <th scope="col" className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 transition-colors duration-200">
@@ -122,7 +124,7 @@ const TaskList: React.FC<TaskListProps> = ({
                                 className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
                                 onClick={() => onViewDetail ? onViewDetail(task) : handleSelectTask(task.id)}
                             >
-                                <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                <td className="px-3 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                                     <input
                                         type="checkbox"
                                         checked={selectedTaskIds.includes(task.id)}
@@ -130,18 +132,38 @@ const TaskList: React.FC<TaskListProps> = ({
                                         className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 bg-white dark:bg-gray-800 transition-colors"
                                     />
                                 </td>
-                                <td className="px-6 py-4">
-                                    <div className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</div>
-                                    {task.description && <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{task.description}</div>}
-                                    {task.dependsOn && (
-                                        <div className="mt-1">
-                                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-                                                🚧 Blocked by: {task.dependsOn.title}
-                                            </span>
-                                        </div>
-                                    )}
+                                <td className="px-3 py-4">
+                                    {(() => {
+                                        const isBlocked = task.blockedBy?.some(b => b.status !== 'done') || false;
+                                        const activeBlockers = task.blockedBy?.filter(b => b.status !== 'done') || [];
+                                        return (
+                                            <>
+                                                <div className="flex items-center gap-1.5">
+                                                    {isBlocked && <span className="text-red-500 flex-shrink-0" title="Locked (Blocked)">🔒</span>}
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</div>
+                                                </div>
+                                                {task.description && <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{task.description}</div>}
+                                                {activeBlockers.length > 0 && (
+                                                    <div className="mt-1 flex flex-wrap gap-1">
+                                                        {activeBlockers.map(b => (
+                                                            <span key={b.id} className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                                                🔒 Blocked by: {b.title}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {task.dependsOn && activeBlockers.length === 0 && (
+                                                    <div className="mt-1">
+                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                                            🚧 Blocked by: {task.dependsOn.title}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap">
+                                <td className="px-2 py-4 whitespace-nowrap">
                                     <div className="flex gap-1 flex-wrap">
                                         {task.projectTag && (
                                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
@@ -158,7 +180,7 @@ const TaskList: React.FC<TaskListProps> = ({
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-3 py-4 whitespace-nowrap">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === 'done' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
                                         task.status === 'in_progress' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' :
                                             task.status === 'review' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
@@ -167,7 +189,7 @@ const TaskList: React.FC<TaskListProps> = ({
                                         {task.status.replace('_', ' ')}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-3 py-4 whitespace-nowrap">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' :
                                         task.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
                                             'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
@@ -175,7 +197,7 @@ const TaskList: React.FC<TaskListProps> = ({
                                         {task.priority}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-3 py-4 whitespace-nowrap">
                                     {task.assignedToId ? (
                                         <div className="flex items-center">
                                             <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs mr-2 border border-transparent dark:border-gray-600">
@@ -187,16 +209,16 @@ const TaskList: React.FC<TaskListProps> = ({
                                         <span className="text-sm text-gray-500 dark:text-gray-400 italic">Unassigned</span>
                                     )}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
                                     {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
                                     {task.updatedAt ? new Date(task.updatedAt).toLocaleDateString() : '—'}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
                                     {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                                <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                                     {canEditTask(task) && (
                                         <button
                                             onClick={() => onEdit(task)}

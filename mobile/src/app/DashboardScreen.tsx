@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Text, Button, Card, FAB, Portal, Modal, TextInput, ActivityIndicator, useTheme, IconButton } from 'react-native-paper';
+import { Text, Button, Card, FAB, Portal, Modal, TextInput, ActivityIndicator, useTheme, IconButton, Badge } from 'react-native-paper';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import { RootState } from './store';
 import { useGetGroupsQuery, useCreateGroupMutation } from '../services/groupsApi';
 import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
+import { useGetUnreadCountQuery } from '../services/notificationsApi';
 
 const DashboardScreen = () => {
     const theme = useTheme();
@@ -15,6 +16,10 @@ const DashboardScreen = () => {
     const user = useSelector((state: RootState) => state.auth.user);
     const { data: groups, isLoading, error, refetch } = useGetGroupsQuery();
     const [createGroup, { isLoading: isCreating }] = useCreateGroupMutation();
+    const { data: unreadData } = useGetUnreadCountQuery(undefined, {
+        pollingInterval: 30000, // refresh every 30s
+    });
+    const unreadCount = unreadData?.count ?? 0;
 
     const [visible, setVisible] = useState(false);
     const [groupName, setGroupName] = useState('');
@@ -59,8 +64,23 @@ const DashboardScreen = () => {
     };
 
     const renderGroupItem = ({ item }: { item: any }) => (
-        <Card style={styles.card} onPress={() => (navigation as any).navigate('GroupDetails', { groupId: item.id })}>
-            <Card.Title title={item.name} subtitle={item.description} />
+        <Card style={styles.card} onPress={() => (navigation as any).navigate('GroupDetails', { groupId: item.id, groupName: item.name })}>
+            <Card.Title
+                title={item.name}
+                subtitle={
+                    <View style={{ marginTop: 4 }}>
+                        {item.description ? <Text variant="bodySmall" numberOfLines={1}>{item.description}</Text> : null}
+                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                            {item.membersCount !== undefined && (
+                                <Text variant="labelSmall" style={{ color: theme.colors.outline }}>👥 {item.membersCount} members</Text>
+                            )}
+                            {item.tasksCount !== undefined && (
+                                <Text variant="labelSmall" style={{ color: theme.colors.outline }}>📋 {item.tasksCount} tasks</Text>
+                            )}
+                        </View>
+                    </View>
+                }
+            />
         </Card>
     );
 
@@ -72,12 +92,7 @@ const DashboardScreen = () => {
                     <Text variant="titleMedium" style={{ color: theme.colors.outline }}>Welcome,</Text>
                     <Text variant="headlineSmall" style={{ fontWeight: 'bold' }}>{user?.name}</Text>
                 </View>
-                <View style={{ flexDirection: 'row' }}>
-                    <IconButton
-                        icon="account-circle"
-                        size={28}
-                        onPress={() => (navigation as any).navigate('Profile')}
-                    />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <IconButton
                         icon="logout"
                         size={24}
@@ -233,6 +248,12 @@ const styles = StyleSheet.create({
         marginBottom: 15,
         textAlign: 'center',
     },
+    badge: {
+        position: 'absolute',
+        top: 4,
+        right: 4,
+    },
 });
+
 
 export default DashboardScreen;

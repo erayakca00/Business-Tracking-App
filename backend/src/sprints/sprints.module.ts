@@ -5,11 +5,14 @@ import { SprintsController } from './sprints.controller';
 import { Sprint } from '../database/entities/sprint.entity';
 import { Task } from '../database/entities/task.entity';
 import { UserGroup } from '../database/entities/user-group.entity';
+import { SprintSnapshot } from '../database/entities/sprint-snapshot.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Sprint, Task, UserGroup])],
-    controllers: [SprintsController],
-    providers: [SprintsService],
-    exports: [SprintsService],
+  imports: [
+    TypeOrmModule.forFeature([Sprint, Task, UserGroup, SprintSnapshot]),
+  ],
+  controllers: [SprintsController],
+  providers: [SprintsService],
+  exports: [SprintsService],
 })
 export class SprintsModule {}

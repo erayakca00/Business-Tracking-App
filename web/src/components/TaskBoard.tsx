@@ -15,6 +15,8 @@ interface Task {
     projectTag?: string;
     dependsOnId?: string | null;
     dependsOn?: { title: string };
+    blockedBy?: Task[];
+    blocking?: Task[];
 }
 
 interface TaskBoardProps {
@@ -79,56 +81,76 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                             }
                         }}
                     >
-                        {postsByStatus[column.id].map(task => (
-                            <div
-                                key={task.id}
-                                draggable={true}
-                                onDragStart={(e) => e.dataTransfer.setData('taskId', task.id)}
-                                className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-200 cursor-pointer group relative"
-                                onClick={() => onViewDetail ? onViewDetail(task) : (canEditTask(task) && onEdit(task))}
-                            >
-                                <div className="flex justify-between items-start mb-2 gap-2">
-                                    <div className="flex items-center flex-wrap gap-2">
-                                        <h4 className="font-medium text-gray-900 dark:text-white text-sm leading-snug">{task.title}</h4>
-                                        <div className="flex gap-1 flex-wrap">
-                                            {task.projectTag && (
-                                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
-                                                    📁 {task.projectTag}
-                                                </span>
-                                            )}
-                                            {!(task as any).assignedTo && !task.assignedToId && (
-                                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800">
-                                                    👤 Unassigned
-                                                </span>
-                                            )}
+                        {postsByStatus[column.id].map(task => {
+                            const isBlocked = task.blockedBy?.some(b => b.status !== 'done') || false;
+                            const activeBlockers = task.blockedBy?.filter(b => b.status !== 'done') || [];
+                            return (
+                                <div
+                                    key={task.id}
+                                    draggable={!isBlocked}
+                                    onDragStart={(e) => e.dataTransfer.setData('taskId', task.id)}
+                                    className={`bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-200 cursor-pointer group relative ${isBlocked ? 'opacity-80' : ''}`}
+                                    onClick={() => onViewDetail ? onViewDetail(task) : (canEditTask(task) && onEdit(task))}
+                                >
+                                    <div className="flex justify-between items-start mb-2 gap-2">
+                                        <div className="flex items-center flex-wrap gap-2">
+                                            <h4 className="font-medium text-gray-900 dark:text-white text-sm leading-snug">{task.title}</h4>
+                                            <div className="flex gap-1 flex-wrap">
+                                                {task.projectTag && (
+                                                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800">
+                                                        📁 {task.projectTag}
+                                                    </span>
+                                                )}
+                                                {isBlocked && (
+                                                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800" title="This task has unresolved blockers">
+                                                        🔒 Blocked
+                                                    </span>
+                                                )}
+                                                {!(task as any).assignedTo && !task.assignedToId && (
+                                                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800">
+                                                        👤 Unassigned
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
+                                        {canDeleteTask && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDelete(task.id);
+                                                }}
+                                                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1 flex-shrink-0 -mr-1 -mt-1"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
                                     </div>
-                                    {canDeleteTask && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onDelete(task.id);
-                                            }}
-                                            className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1 flex-shrink-0 -mr-1 -mt-1"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
+
+                                    {task.description && (
+                                        <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 mb-3">
+                                            {task.description}
+                                        </p>
                                     )}
-                                </div>
 
-                                {task.description && (
-                                    <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 mb-3">
-                                        {task.description}
-                                    </p>
-                                )}
+                                    {activeBlockers.length > 0 && (
+                                        <div className="mb-1.5 space-y-1">
+                                            {activeBlockers.map(b => (
+                                                <div key={b.id} className="flex items-start gap-1">
+                                                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-805">
+                                                        🔒 Blocked by: {b.title}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
 
-                                {task.dependsOn && (
-                                    <div className="mb-1.5 flex items-start gap-1">
-                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-                                            🚧 Blocked by: {task.dependsOn.title}
-                                        </span>
-                                    </div>
-                                )}
+                                    {task.dependsOn && activeBlockers.length === 0 && (
+                                        <div className="mb-1.5 flex items-start gap-1">
+                                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                                🚧 Blocked by: {task.dependsOn.title}
+                                            </span>
+                                        </div>
+                                    )}
 
                                 <div className="mb-1">
                                     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${task.priority === 'high' ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300' :
@@ -174,7 +196,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                                     </div>
                                 )}
                             </div>
-                        ))}
+                        );
+                    })}
                     </div>
                 </div>
             ))}

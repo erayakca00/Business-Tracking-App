@@ -1,4 +1,5 @@
 import { api } from './api';
+import { Task } from './tasksApi';
 
 export interface UserProfile {
     id: string;
@@ -25,6 +26,13 @@ export const usersApi = api.injectEndpoints({
             query: () => '/users/me',
             providesTags: ['User'],
         }),
+        getMyTasks: builder.query<Task[], void>({
+            query: () => '/tasks/my',
+            providesTags: (result) =>
+                result
+                    ? [...result.map(({ id }) => ({ type: 'Task' as const, id })), { type: 'Task', id: 'LIST' }]
+                    : [{ type: 'Task', id: 'LIST' }],
+        }),
         updateProfile: builder.mutation<UserProfile, UpdateProfileDto>({
             query: (data) => ({
                 url: '/users/me',
@@ -40,11 +48,20 @@ export const usersApi = api.injectEndpoints({
                 body: data,
             }),
         }),
+        registerPushToken: builder.mutation<void, { token: string }>({
+            query: (body) => ({
+                url: '/users/me/push-token',
+                method: 'POST',
+                body,
+            }),
+        }),
     }),
 });
 
 export const {
     useGetProfileQuery,
+    useGetMyTasksQuery,
     useUpdateProfileMutation,
-    useChangePasswordMutation
+    useChangePasswordMutation,
+    useRegisterPushTokenMutation,
 } = usersApi;

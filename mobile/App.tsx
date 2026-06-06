@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer, DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme, useNavigationContainerRef } from '@react-navigation/native';
 import { Provider } from 'react-redux';
 import {
   Provider as PaperProvider,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   adaptNavigationTheme
 } from 'react-native-paper';
-import { View, StyleSheet, useColorScheme, LogBox } from 'react-native';
+import { View, StyleSheet, LogBox, StatusBar } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { store } from './src/app/store';
 
@@ -17,6 +17,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { loadStoredCredentials } from './src/features/auth/authSlice';
 import { loadTheme } from './src/features/theme/themeSlice';
 import { useAppDispatch, useAppSelector } from './src/app/hooks';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 
 const { LightTheme, DarkTheme } = adaptNavigationTheme({
   reactNavigationLight: NavigationDefaultTheme,
@@ -54,6 +55,10 @@ const AppContent = () => {
   const isAuthLoading = useAppSelector((state) => state.auth.isLoading);
   const isThemeLoading = useAppSelector((state) => state.theme.isLoading);
   const themeMode = useAppSelector((state) => state.theme.mode);
+  const navigationRef = useNavigationContainerRef();
+
+  // Wire up push notifications permission requesting and FCM event listeners
+  usePushNotifications(navigationRef);
 
   useEffect(() => {
     dispatch(loadStoredCredentials());
@@ -72,7 +77,12 @@ const AppContent = () => {
 
   return (
     <PaperProvider theme={theme}>
-      <NavigationContainer theme={theme}>
+      <NavigationContainer ref={navigationRef} theme={theme}>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle={themeMode === 'dark' ? 'light-content' : 'dark-content'}
+        />
         <AppNavigator />
         <Toast />
       </NavigationContainer>

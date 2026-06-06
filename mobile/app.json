@@ -1,4 +1,17 @@
 {
   "name": "BusinessTrackingApp",
-  "displayName": "BusinessTrackingApp"
+  "displayName": "BusinessTrackingApp",
+  "expo": {
+    "name": "BusinessTrackingApp",
+    "slug": "businesstrackingapp",
+    "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
+  }
 }

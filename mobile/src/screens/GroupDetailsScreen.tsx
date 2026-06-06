@@ -1,16 +1,24 @@
-import React, { useState } from 'react';
+/* eslint-disable react-native/no-inline-styles, react/no-unstable-nested-components */
+import React, { useState, useRef } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import BottomSheet from '@gorhom/bottom-sheet';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import { Text, Card, FAB, Portal, Modal, TextInput, Button, ActivityIndicator, Chip, Menu, Dialog, useTheme, IconButton } from 'react-native-paper';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { useGetTasksByGroupQuery, useCreateTaskMutation, useUpdateTaskMutation, useDeleteTaskMutation } from '../services/tasksApi';
-import { useGetGroupByIdQuery, useGetGroupMembersQuery, useAddGroupMemberMutation, useRemoveGroupMemberMutation } from '../services/groupsApi';
+import { useGetGroupByIdQuery, useGetGroupMembersQuery, useAddGroupMemberMutation, useRemoveGroupMemberMutation, useDeleteGroupMutation } from '../services/groupsApi';
 import { RootState } from '../app/store';
+import TaskDetailSheet, { TaskForSheet } from '../components/TaskDetailSheet';
+import { useSocket } from '../hooks/useSocket';
+import { useGetTemplatesByGroupQuery } from '../services/templatesApi';
 
 type RouteParams = {
     GroupDetails: {
         groupId: string;
+        groupName?: string;
     };
 };
 
@@ -30,6 +38,29 @@ const GroupDetailsScreen = () => {
     const [deleteTask] = useDeleteTaskMutation();
     const [addMember] = useAddGroupMemberMutation();
     const [removeMember] = useRemoveGroupMemberMutation();
+    const [deleteGroup] = useDeleteGroupMutation();
+
+    const { socket, connected } = useSocket(groupId);
+
+    React.useEffect(() => {
+        if (!socket) return;
+
+        const handleWebSocketEvent = () => {
+            refetchTasks();
+        };
+
+        socket.on('task:created', handleWebSocketEvent);
+        socket.on('task:updated', handleWebSocketEvent);
+        socket.on('task:deleted', handleWebSocketEvent);
+
+        return () => {
+            socket.off('task:created', handleWebSocketEvent);
+            socket.off('task:updated', handleWebSocketEvent);
+            socket.off('task:deleted', handleWebSocketEvent);
+        };
+    }, [socket, refetchTasks]);
+
+    const isOwner = group?.ownerId === currentUserId;
 
     const [visible, setVisible] = useState(false);
     const [taskTitle, setTaskTitle] = useState('');
@@ -37,9 +68,10 @@ const GroupDetailsScreen = () => {
     const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
     const [assignedTo, setAssignedTo] = useState<string | null>(null);
     const [dueDate, setDueDate] = useState('');
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [tagPrefix, setTagPrefix] = useState('');   // e.g. PRO
     const [tagNumber, setTagNumber] = useState('');   // e.g. 1
-    const [tagError, setTagError] = useState('');
+    const [_tagError, setTagError] = useState('');
 
     const projectTag = tagPrefix.length === 3 && tagNumber ? `${tagPrefix}-${tagNumber}` : undefined;
 
@@ -55,23 +87,68 @@ const GroupDetailsScreen = () => {
     };
     const resetTag = () => { setTagPrefix(''); setTagNumber(''); setTagError(''); };
 
+    const handleSelectTemplate = (templateId: string) => {
+        const selected = templates?.find((t: any) => t.id === templateId);
+        if (selected) {
+            if (selected.title) setTaskTitle(selected.title);
+            if (selected.description) setTaskDesc(selected.description);
+            if (selected.priority) setPriority(selected.priority);
+            if (selected.projectTag) {
+                const parts = selected.projectTag.split('-');
+                if (parts.length === 2) {
+                    setTagPrefix(parts[0]);
+                    setTagNumber(parts[1]);
+                } else {
+                    setTagPrefix(selected.projectTag);
+                    setTagNumber('');
+                }
+            } else {
+                setTagPrefix('');
+                setTagNumber('');
+            }
+        }
+    };
+
     // Edit/Delete state
     const [editingTask, setEditingTask] = useState<any>(null);
+    const { data: templates } = useGetTemplatesByGroupQuery(groupId, { skip: !visible || !!editingTask });
     const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
     const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
     const [menuVisible, setMenuVisible] = useState<string | null>(null);
     const [statusMenuVisible, setStatusMenuVisible] = useState<string | null>(null);
+    const [headerMenuVisible, setHeaderMenuVisible] = useState(false);
+
+    // Bulk Selection States
+    const [bulkSelectMode, setBulkSelectMode] = useState(false);
+    const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+    const [bulkStatusMenuVisible, setBulkStatusMenuVisible] = useState(false);
+    const [bulkPriorityMenuVisible, setBulkPriorityMenuVisible] = useState(false);
+    const [bulkAssignVisible, setBulkAssignVisible] = useState(false);
+    const [bulkDeleteDialogVisible, setBulkDeleteDialogVisible] = useState(false);
 
     // Member management state
     const [memberModalVisible, setMemberModalVisible] = useState(false);
     const [memberEmail, setMemberEmail] = useState('');
     const [refreshing, setRefreshing] = useState(false);
-    const [showMembers, setShowMembers] = useState(false);
+    const [membersListModalVisible, setMembersListModalVisible] = useState(false);
     const [showAssigneeList, setShowAssigneeList] = useState(false);
     const [tagFilter, setTagFilter] = useState<string | null>(null);
     const [showModalTagList, setShowModalTagList] = useState(false);
     const [mobileSortBy, setMobileSortBy] = useState<'title' | 'tag' | 'createdAt' | 'updatedAt' | 'dueDate' | 'priority'>('createdAt');
     const [mobileSortDir, setMobileSortDir] = useState<'asc' | 'desc'>('desc');
+
+    // Task Detail Sheet
+    const sheetRef = useRef<BottomSheet>(null);
+    const [selectedTask, setSelectedTask] = useState<TaskForSheet | null>(null);
+
+    const openTaskSheet = (task: any) => {
+        setSelectedTask(task);
+        sheetRef.current?.expand();
+    };
+
+    const closeTaskSheet = () => {
+        setSelectedTask(null);
+    };
 
     const SORT_OPTIONS: { key: typeof mobileSortBy; label: string }[] = [
         { key: 'createdAt', label: 'Created' },
@@ -124,6 +201,239 @@ const GroupDetailsScreen = () => {
         setRefreshing(true);
         await Promise.all([refetchTasks(), refetchMembers()]);
         setRefreshing(false);
+    };
+
+    const navigation = useNavigation();
+
+    const handleDeleteGroup = React.useCallback(async () => {
+        setHeaderMenuVisible(false);
+        try {
+            await deleteGroup(groupId).unwrap();
+            Toast.show({ type: 'success', text1: 'Success', text2: 'Group deleted successfully!' });
+            navigation.goBack();
+        } catch (err: any) {
+            Toast.show({ type: 'error', text1: 'Error', text2: err.data?.message || 'Failed to delete group' });
+        }
+    }, [groupId, deleteGroup, navigation]);
+
+    const handleLeaveGroup = React.useCallback(async () => {
+        setHeaderMenuVisible(false);
+        if (!currentUserId) return;
+        try {
+            await removeMember({ groupId, userId: currentUserId }).unwrap();
+            Toast.show({ type: 'success', text1: 'Success', text2: 'Left group successfully!' });
+            navigation.goBack();
+        } catch (err: any) {
+            Toast.show({ type: 'error', text1: 'Error', text2: err.data?.message || 'Failed to leave group' });
+        }
+    }, [groupId, currentUserId, removeMember, navigation]);
+
+    const toggleBulkSelectMode = React.useCallback(() => {
+        setBulkSelectMode(prev => !prev);
+        setSelectedTaskIds(new Set());
+    }, []);
+
+    React.useLayoutEffect(() => {
+        navigation.setOptions({
+            title: group?.name || route.params?.groupName || 'Group Tasks',
+            headerRight: () => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12, gap: 4 }}>
+                    <View style={[
+                        styles.liveBadge, 
+                        { backgroundColor: connected ? '#E8F5E9' : '#FFF3E0' }
+                    ]}>
+                        <View style={[
+                            styles.liveDot, 
+                            { backgroundColor: connected ? '#4CAF50' : '#FF9800' }
+                        ]} />
+                        <Text style={[
+                            styles.liveText, 
+                            { color: connected ? '#2E7D32' : '#E65100' }
+                        ]}>
+                            {connected ? 'LIVE' : 'OFFLINE'}
+                        </Text>
+                    </View>
+                    <Menu
+                        visible={headerMenuVisible}
+                        onDismiss={() => setHeaderMenuVisible(false)}
+                        anchor={
+                            <IconButton
+                                icon="dots-vertical"
+                                onPress={() => setHeaderMenuVisible(true)}
+                                size={20}
+                                style={{ margin: 0 }}
+                            />
+                        }
+                    >
+                        <Menu.Item
+                            onPress={() => {
+                                setHeaderMenuVisible(false);
+                                (navigation as any).navigate('SprintPlanning', { groupId, groupName: group?.name });
+                            }}
+                            title="Sprint Planning"
+                            leadingIcon="calendar-sync"
+                        />
+                        <Menu.Item
+                            onPress={() => {
+                                setHeaderMenuVisible(false);
+                                (navigation as any).navigate('Analytics', { groupId });
+                            }}
+                            title="Group Analytics"
+                            leadingIcon="chart-bar"
+                        />
+                        <Menu.Item
+                            onPress={() => {
+                                setHeaderMenuVisible(false);
+                                toggleBulkSelectMode();
+                            }}
+                            title={bulkSelectMode ? "Disable Bulk Select" : "Bulk Select Mode"}
+                            leadingIcon={bulkSelectMode ? "checkbox-marked-outline" : "checkbox-multiple-marked-outline"}
+                        />
+                        <Menu.Item
+                            onPress={() => {
+                                setHeaderMenuVisible(false);
+                                setMembersListModalVisible(true);
+                            }}
+                            title="Group Members"
+                            leadingIcon="account-group"
+                        />
+                        {isOwner ? (
+                            <Menu.Item onPress={handleDeleteGroup} title="Delete Group" leadingIcon="delete" titleStyle={{ color: theme.colors.error }} />
+                        ) : (
+                            <Menu.Item onPress={handleLeaveGroup} title="Leave Group" leadingIcon="exit-to-app" titleStyle={{ color: theme.colors.error }} />
+                        )}
+                    </Menu>
+                </View>
+            ),
+        });
+    }, [navigation, headerMenuVisible, isOwner, theme, connected, bulkSelectMode, group?.name, groupId, handleDeleteGroup, handleLeaveGroup, toggleBulkSelectMode]);
+
+    const handleSelectTask = (taskId: string) => {
+        setSelectedTaskIds(prev => {
+            const next = new Set(prev);
+            if (next.has(taskId)) {
+                next.delete(taskId);
+            } else {
+                next.add(taskId);
+            }
+            return next;
+        });
+    };
+
+    const handleBulkStatusChange = async (newStatus: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked') => {
+        setBulkStatusMenuVisible(false);
+        let successCount = 0;
+        let failCount = 0;
+        let blockedTasksCount = 0;
+
+        const tasksToUpdate = getSortedFilteredTasks().filter(t => selectedTaskIds.has(t.id));
+        
+        for (const t of tasksToUpdate) {
+            const isBlocked = t.blockedBy?.some((b: any) => b.status !== 'done') || false;
+            if (isBlocked && (newStatus === 'in_progress' || newStatus === 'review' || newStatus === 'done')) {
+                blockedTasksCount++;
+                continue;
+            }
+
+            try {
+                await updateTask({ id: t.id, data: { status: newStatus } }).unwrap();
+                successCount++;
+            } catch {
+                failCount++;
+            }
+        }
+
+        let msg = `${successCount} tasks updated.`;
+        if (blockedTasksCount > 0) {
+            msg += ` ${blockedTasksCount} tasks were locked due to active blockers.`;
+        }
+        if (failCount > 0) {
+            msg += ` ${failCount} tasks failed to update.`;
+        }
+
+        Toast.show({
+            type: blockedTasksCount > 0 || failCount > 0 ? 'info' : 'success',
+            text1: 'Bulk Status Update',
+            text2: msg,
+        });
+
+        setSelectedTaskIds(new Set());
+        setBulkSelectMode(false);
+    };
+
+    const handleBulkPriorityChange = async (newPriority: 'low' | 'medium' | 'high') => {
+        setBulkPriorityMenuVisible(false);
+        let successCount = 0;
+        let failCount = 0;
+        const tasksToUpdate = getSortedFilteredTasks().filter(t => selectedTaskIds.has(t.id));
+
+        for (const t of tasksToUpdate) {
+            try {
+                await updateTask({ id: t.id, data: { priority: newPriority } }).unwrap();
+                successCount++;
+            } catch {
+                failCount++;
+            }
+        }
+
+        Toast.show({
+            type: failCount > 0 ? 'info' : 'success',
+            text1: 'Bulk Priority Update',
+            text2: `${successCount} tasks updated.${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+        });
+
+        setSelectedTaskIds(new Set());
+        setBulkSelectMode(false);
+    };
+
+    const handleBulkAssign = async (memberId: string | null) => {
+        setBulkAssignVisible(false);
+        let successCount = 0;
+        let failCount = 0;
+        const tasksToUpdate = getSortedFilteredTasks().filter(t => selectedTaskIds.has(t.id));
+
+        for (const t of tasksToUpdate) {
+            try {
+                await updateTask({ id: t.id, data: { assignedToId: memberId } }).unwrap();
+                successCount++;
+            } catch {
+                failCount++;
+            }
+        }
+
+        Toast.show({
+            type: failCount > 0 ? 'info' : 'success',
+            text1: 'Bulk Reassignment',
+            text2: `${successCount} tasks updated.${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+        });
+
+        setSelectedTaskIds(new Set());
+        setBulkSelectMode(false);
+    };
+
+    const handleBulkDelete = async () => {
+        setBulkDeleteDialogVisible(false);
+        let successCount = 0;
+        let failCount = 0;
+        const idsToDelete = Array.from(selectedTaskIds);
+
+        for (const id of idsToDelete) {
+            try {
+                await deleteTask(id).unwrap();
+                successCount++;
+            } catch {
+                failCount++;
+            }
+        }
+
+        Toast.show({
+            type: failCount > 0 ? 'info' : 'success',
+            text1: 'Bulk Deletion',
+            text2: `${successCount} tasks deleted.${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+        });
+
+        setSelectedTaskIds(new Set());
+        setBulkSelectMode(false);
     };
 
     const handleCreateTask = async () => {
@@ -238,13 +548,13 @@ const GroupDetailsScreen = () => {
             Toast.show({
                 type: 'success',
                 text1: 'Success',
-                text2: 'Member added successfully!',
+                text2: 'Invitation sent successfully!',
             });
         } catch (err: any) {
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: err.data?.message || 'Failed to add member',
+                text2: err.data?.message || 'Failed to send invitation',
             });
         }
     };
@@ -272,12 +582,13 @@ const GroupDetailsScreen = () => {
             case 'in_progress': return '#2196F3';
             case 'review': return '#FFC107';
             case 'done': return '#4CAF50';
+            case 'blocked': return '#F44336';
             default: return '#9E9E9E';
         }
     };
 
-    const getPriorityColor = (priority: string) => {
-        switch (priority.toLowerCase()) {
+    const getPriorityColor = (pri: string) => {
+        switch (pri.toLowerCase()) {
             case 'low': return '#4CAF50';
             case 'medium': return '#FF9800';
             case 'high': return '#F44336';
@@ -285,148 +596,149 @@ const GroupDetailsScreen = () => {
         }
     };
 
-    const handleStatusChange = async (taskId: string, newStatus: 'todo' | 'in_progress' | 'review' | 'done') => {
+    const handleStatusChange = async (taskId: string, newStatus: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked') => {
         try {
             await updateTask({ id: taskId, data: { status: newStatus } }).unwrap();
             setStatusMenuVisible(null);
-        } catch (err) {
-            console.error('Failed to update task status', err);
+        } catch (err: any) {
+            Toast.show({
+                type: 'error',
+                text1: 'Failed to update status',
+                text2: err.data?.message || 'Error occurred',
+            });
         }
     };
 
-    const renderTaskItem = ({ item }: { item: any }) => (
-        <Card style={styles.card}>
-            <Card.Content>
-                <View style={styles.taskHeader}>
-                    <Text variant="titleMedium" style={styles.taskTitle}>{item.title}</Text>
-                    <Menu
-                        visible={menuVisible === item.id}
-                        onDismiss={() => setMenuVisible(null)}
-                        anchor={
-                            <Button onPress={() => setMenuVisible(item.id)} icon="dots-vertical" compact>Menu</Button>
-                        }
-                    >
-                        {/* Only show Edit if allowed */}
-                        {canEdit(item) && <Menu.Item onPress={() => handleEditTask(item)} title="Edit" leadingIcon="pencil" />}
-                        {/* Only show Delete if admin */}
-                        {canDelete && <Menu.Item onPress={() => openDeleteDialog(item.id)} title="Delete" leadingIcon="delete" />}
-                    </Menu>
-                </View>
-                {item.description ? <Text variant="bodySmall" numberOfLines={2} style={[styles.taskDesc, { color: theme.colors.onSurfaceVariant }]}>{item.description}</Text> : null}
-                <View style={styles.taskFooter}>
-                    <Menu
-                        visible={statusMenuVisible === item.id}
-                        onDismiss={() => setStatusMenuVisible(null)}
-                        anchor={
+    const renderTaskItem = ({ item }: { item: any }) => {
+        const isBlocked = item.blockedBy?.some((b: any) => b.status !== 'done') || false;
+        const activeBlockers = item.blockedBy?.filter((b: any) => b.status !== 'done') || [];
+        const isSelected = selectedTaskIds.has(item.id);
+
+        return (
+            <Card
+                style={[
+                    styles.card,
+                    isSelected && { borderColor: theme.colors.primary, borderWidth: 1.5 }
+                ]}
+                onPress={() => {
+                    if (bulkSelectMode) {
+                        handleSelectTask(item.id);
+                    } else {
+                        openTaskSheet(item);
+                    }
+                }}
+            >
+                <Card.Content>
+                    <View style={styles.taskHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                            {bulkSelectMode && (
+                                <IconButton
+                                    icon={isSelected ? "checkbox-marked" : "checkbox-blank-outline"}
+                                    iconColor={isSelected ? theme.colors.primary : theme.colors.outline}
+                                    size={20}
+                                    style={{ margin: 0, marginRight: 4 }}
+                                />
+                            )}
+                            {isBlocked && <Text style={{ fontSize: 14, marginRight: 4 }}>🔒</Text>}
+                            <Text variant="titleMedium" style={styles.taskTitle} numberOfLines={1}>{item.title}</Text>
+                        </View>
+                        {!bulkSelectMode && (
+                            <Menu
+                                visible={menuVisible === item.id}
+                                onDismiss={() => setMenuVisible(null)}
+                                anchor={
+                                    <Button onPress={() => setMenuVisible(item.id)} icon="dots-vertical" compact style={{ margin: 0 }}>Menu</Button>
+                                }
+                            >
+                                {/* Only show Edit if allowed */}
+                                {canEdit(item) && <Menu.Item onPress={() => handleEditTask(item)} title="Edit" leadingIcon="pencil" />}
+                                {/* Only show Delete if admin */}
+                                {canDelete && <Menu.Item onPress={() => openDeleteDialog(item.id)} title="Delete" leadingIcon="delete" />}
+                            </Menu>
+                        )}
+                    </View>
+                    {isBlocked && (
+                        <Text variant="bodySmall" style={{ color: '#F44336', marginBottom: 4, fontWeight: 'bold' }}>
+                            Blocked by: {activeBlockers.map((b: any) => b.title).join(', ')}
+                        </Text>
+                    )}
+                    {item.description ? <Text variant="bodySmall" numberOfLines={2} style={[styles.taskDesc, { color: theme.colors.onSurfaceVariant }]}>{item.description}</Text> : null}
+                    <View style={styles.taskFooter}>
+                        {!bulkSelectMode ? (
+                            <Menu
+                                visible={statusMenuVisible === item.id}
+                                onDismiss={() => setStatusMenuVisible(null)}
+                                anchor={
+                                    <Chip
+                                        compact
+                                        style={{ backgroundColor: getStatusColor(item.status) }}
+                                        textStyle={{ color: '#fff', fontSize: 10 }}
+                                        // Only allow status change if can edit
+                                        onPress={() => canEdit(item) && setStatusMenuVisible(item.id)}
+                                    >
+                                        {item.status.replace('_', ' ')}
+                                    </Chip>
+                                }
+                            >
+                                <Menu.Item onPress={() => handleStatusChange(item.id, 'todo')} title="To Do" />
+                                <Menu.Item onPress={() => handleStatusChange(item.id, 'in_progress')} title="In Progress" disabled={isBlocked} />
+                                <Menu.Item onPress={() => handleStatusChange(item.id, 'review')} title="In Review" disabled={isBlocked} />
+                                <Menu.Item onPress={() => handleStatusChange(item.id, 'done')} title="Done" disabled={isBlocked} />
+                                <Menu.Item onPress={() => handleStatusChange(item.id, 'blocked')} title="Blocked" />
+                            </Menu>
+                        ) : (
                             <Chip
                                 compact
                                 style={{ backgroundColor: getStatusColor(item.status) }}
                                 textStyle={{ color: '#fff', fontSize: 10 }}
-                                // Only allow status change if can edit
-                                onPress={() => canEdit(item) && setStatusMenuVisible(item.id)}
                             >
                                 {item.status.replace('_', ' ')}
                             </Chip>
-                        }
-                    >
-                        <Menu.Item onPress={() => handleStatusChange(item.id, 'todo')} title="To Do" />
-                        <Menu.Item onPress={() => handleStatusChange(item.id, 'in_progress')} title="In Progress" />
-                        <Menu.Item onPress={() => handleStatusChange(item.id, 'review')} title="In Review" />
-                        <Menu.Item onPress={() => handleStatusChange(item.id, 'done')} title="Done" />
-                    </Menu>
-                    <Chip compact style={{ backgroundColor: getPriorityColor(item.priority), marginLeft: 5 }} textStyle={{ color: '#fff', fontSize: 10 }}>
-                        {item.priority}
-                    </Chip>
-                    {item.dueDate && (
-                        <Chip compact icon="calendar" style={{ marginLeft: 5, backgroundColor: theme.colors.surfaceVariant }} textStyle={{ fontSize: 10 }}>
-                            {new Date(item.dueDate).toLocaleDateString()}
+                        )}
+                        <Chip compact style={{ backgroundColor: getPriorityColor(item.priority), marginLeft: 5 }} textStyle={{ color: '#fff', fontSize: 10 }}>
+                            {item.priority}
                         </Chip>
-                    )}
-                    {item.assignedToId && (
-                        <Chip compact icon="account" style={{ marginLeft: 5, backgroundColor: theme.colors.secondaryContainer }} textStyle={{ fontSize: 10 }}>
-                            {members?.find((m: any) => m.userId === item.assignedToId)?.name || 'Assigned'}
-                        </Chip>
-                    )}
-                    {item.projectTag && (
-                        <Chip compact icon="folder" style={{ marginLeft: 5, backgroundColor: theme.colors.tertiaryContainer }} textStyle={{ fontSize: 10 }}>
-                            {item.projectTag}
-                        </Chip>
-                    )}
-                    {item.createdAt && (
-                        <Chip compact icon="clock-outline" style={{ marginLeft: 5, backgroundColor: theme.colors.surfaceVariant }} textStyle={{ fontSize: 10 }}>
-                            {new Date(item.createdAt).toLocaleDateString()}
-                        </Chip>
-                    )}
-                    {item.updatedAt && item.updatedAt !== item.createdAt && (
-                        <Chip compact icon="pencil-outline" style={{ marginLeft: 5, backgroundColor: theme.colors.surfaceVariant }} textStyle={{ fontSize: 10 }}>
-                            edited {new Date(item.updatedAt).toLocaleDateString()}
-                        </Chip>
-                    )}
-                </View>
-            </Card.Content>
-        </Card>
-    );
+                        {item.dueDate && (
+                            <Chip compact icon="calendar" style={{ marginLeft: 5, backgroundColor: theme.colors.surfaceVariant }} textStyle={{ fontSize: 10 }}>
+                                {new Date(item.dueDate).toLocaleDateString()}
+                            </Chip>
+                        )}
+                        {item.assignedToId && (
+                            <Chip compact icon="account" style={{ marginLeft: 5, backgroundColor: theme.colors.secondaryContainer }} textStyle={{ fontSize: 10 }}>
+                                {members?.find((m: any) => m.userId === item.assignedToId)?.name || 'Assigned'}
+                            </Chip>
+                        )}
+                        {item.projectTag && (
+                            <Chip compact icon="folder" style={{ marginLeft: 5, backgroundColor: theme.colors.tertiaryContainer }} textStyle={{ fontSize: 10 }}>
+                                {item.projectTag}
+                            </Chip>
+                        )}
+                        {item.effortScore !== undefined && item.effortScore !== null && (
+                            <Chip compact icon="star" style={{ marginLeft: 5, backgroundColor: theme.colors.primaryContainer }} textStyle={{ fontSize: 10 }}>
+                                {item.effortScore} pts
+                            </Chip>
+                        )}
+                        {item.createdAt && (
+                            <Chip compact icon="clock-outline" style={{ marginLeft: 5, backgroundColor: theme.colors.surfaceVariant }} textStyle={{ fontSize: 10 }}>
+                                {new Date(item.createdAt).toLocaleDateString()}
+                            </Chip>
+                        )}
+                        {item.updatedAt && item.updatedAt !== item.createdAt && (
+                            <Chip compact icon="pencil-outline" style={{ marginLeft: 5, backgroundColor: theme.colors.surfaceVariant }} textStyle={{ fontSize: 10 }}>
+                                edited {new Date(item.updatedAt).toLocaleDateString()}
+                            </Chip>
+                        )}
+                    </View>
+                </Card.Content>
+            </Card>
+        );
+    };
 
     return (
+        <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
-                <Text variant="headlineSmall">{group?.name}</Text>
-                <Text variant="bodyMedium" style={[styles.description, { color: theme.colors.onSurfaceVariant }]}>{group?.description}</Text>
-                {isAdmin && <Chip style={{ alignSelf: 'flex-start', marginTop: 8 }} icon="shield-account">Admin View</Chip>}
-            </View>
 
-            <View style={[styles.membersSection, { backgroundColor: theme.colors.surface }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text variant="titleMedium" style={styles.sectionTitle}>Members ({members?.length || 0})</Text>
-                    <IconButton
-                        icon={showMembers ? "chevron-up" : "chevron-down"}
-                        onPress={() => setShowMembers(!showMembers)}
-                        size={20}
-                    />
-                </View>
 
-                {showMembers && (
-                    <>
-                        {members?.map((member: any) => (
-                            <View key={member.id} style={styles.memberRow}>
-                                <View style={styles.memberInfo}>
-                                    <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primaryContainer }]}>
-                                        <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
-                                            {member.name.charAt(0).toUpperCase()}
-                                        </Text>
-                                    </View>
-                                    <View style={{ marginLeft: 12 }}>
-                                        <Text variant="bodyLarge" style={{ fontWeight: '500' }}>{member.name}</Text>
-                                        <Text variant="bodySmall" style={{ color: theme.colors.outline }}>
-                                            {member.role === 'admin' ? 'Admin' : 'Member'}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                {isAdmin && member.userId !== currentUserId && (
-                                    <IconButton
-                                        icon="delete-outline"
-                                        iconColor={theme.colors.error}
-                                        size={20}
-                                        onPress={() => handleRemoveMember(member.userId)}
-                                    />
-                                )}
-                            </View>
-                        ))}
-
-                        {isAdmin && (
-                            <Button
-                                mode="outlined"
-                                onPress={() => setMemberModalVisible(true)}
-                                icon="account-plus"
-                                style={{ marginTop: 10, borderColor: theme.colors.primary }}
-                            >
-                                Add Member
-                            </Button>
-                        )}
-                    </>
-                )}
-            </View>
 
             {isLoading && !refreshing ? (
                 <ActivityIndicator animating={true} style={styles.loader} />
@@ -441,10 +753,19 @@ const GroupDetailsScreen = () => {
                 <>
                     {/* Project Tag Filter */}
                     {tasks && tasks.some((t: any) => t.projectTag) && (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 10, paddingVertical: 6, flexGrow: 0 }}>
+                        <ScrollView 
+                            horizontal 
+                            showsHorizontalScrollIndicator={false} 
+                            style={{ flexGrow: 0, flexShrink: 0, height: 44, paddingVertical: 6 }}
+                            contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'center' }}
+                        >
                             <TouchableOpacity
                                 onPress={() => setTagFilter(null)}
-                                style={[styles.filterChip, tagFilter === null && { backgroundColor: theme.colors.primary }]}
+                                style={[
+                                    styles.filterChip, 
+                                    { borderColor: theme.colors.primary },
+                                    tagFilter === null && { backgroundColor: theme.colors.primary }
+                                ]}
                             >
                                 <Text style={{ color: tagFilter === null ? '#fff' : theme.colors.primary, fontSize: 12 }}>All</Text>
                             </TouchableOpacity>
@@ -452,7 +773,11 @@ const GroupDetailsScreen = () => {
                                 <TouchableOpacity
                                     key={tag}
                                     onPress={() => setTagFilter(tagFilter === tag ? null : tag)}
-                                    style={[styles.filterChip, tagFilter === tag && { backgroundColor: theme.colors.primary }]}
+                                    style={[
+                                        styles.filterChip, 
+                                        { borderColor: theme.colors.primary },
+                                        tagFilter === tag && { backgroundColor: theme.colors.primary }
+                                    ]}
                                 >
                                     <Text style={{ color: tagFilter === tag ? '#fff' : theme.colors.primary, fontSize: 12 }}>📁 {tag}</Text>
                                 </TouchableOpacity>
@@ -460,7 +785,12 @@ const GroupDetailsScreen = () => {
                         </ScrollView>
                     )}
                     {/* Sort Bar */}
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 10, paddingBottom: 4, flexGrow: 0 }}>
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        style={{ flexGrow: 0, flexShrink: 0, height: 40, paddingBottom: 4 }}
+                        contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'center' }}
+                    >
                         {SORT_OPTIONS.map(opt => (
                             <TouchableOpacity
                                 key={opt.key}
@@ -468,7 +798,11 @@ const GroupDetailsScreen = () => {
                                     if (mobileSortBy === opt.key) setMobileSortDir(d => d === 'asc' ? 'desc' : 'asc');
                                     else { setMobileSortBy(opt.key); setMobileSortDir('asc'); }
                                 }}
-                                style={[styles.filterChip, mobileSortBy === opt.key && { backgroundColor: theme.colors.secondary }]}
+                                style={[
+                                    styles.filterChip, 
+                                    { borderColor: theme.colors.secondary },
+                                    mobileSortBy === opt.key && { backgroundColor: theme.colors.secondary }
+                                ]}
                             >
                                 <Text style={{ color: mobileSortBy === opt.key ? '#fff' : theme.colors.secondary, fontSize: 11 }}>
                                     {opt.label} {mobileSortBy === opt.key ? (mobileSortDir === 'asc' ? '↑' : '↓') : ''}
@@ -480,6 +814,7 @@ const GroupDetailsScreen = () => {
                         data={getSortedFilteredTasks()}
                         renderItem={renderTaskItem}
                         keyExtractor={(item) => item.id}
+                        style={{ flex: 1 }}
                         contentContainerStyle={styles.list}
                         refreshControl={
                             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />
@@ -497,6 +832,24 @@ const GroupDetailsScreen = () => {
             <Portal>
                 <Modal visible={visible} onDismiss={hideModal} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
                     <Text variant="titleLarge">{editingTask ? 'Edit Task' : 'Create New Task'}</Text>
+                    {!editingTask && templates && templates.length > 0 && (
+                        <View style={{ marginBottom: 12, marginTop: 10 }}>
+                            <Text variant="labelMedium" style={{ marginBottom: 4, color: theme.colors.onSurface }}>Start from Template</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                {templates.map((t: any) => (
+                                    <Chip
+                                        key={t.id}
+                                        icon="file-document-outline"
+                                        onPress={() => handleSelectTemplate(t.id)}
+                                        style={{ marginRight: 6, backgroundColor: theme.colors.secondaryContainer }}
+                                        textStyle={{ fontSize: 11 }}
+                                    >
+                                        {t.name}
+                                    </Chip>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )}
                     <TextInput
                         label="Task Title"
                         value={taskTitle}
@@ -511,13 +864,31 @@ const GroupDetailsScreen = () => {
                         numberOfLines={3}
                         style={[styles.input, { minHeight: 60, backgroundColor: theme.colors.surface }]}
                     />
-                    <TextInput
-                        label="Deadline (YYYY-MM-DD)"
-                        value={dueDate}
-                        onChangeText={setDueDate}
-                        placeholder="2026-05-20"
-                        style={[styles.input, { backgroundColor: theme.colors.surface }]}
-                    />
+                    <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+                        <View pointerEvents="none">
+                            <TextInput
+                                label="Deadline"
+                                value={dueDate}
+                                editable={false}
+                                placeholder="Select a date"
+                                right={<TextInput.Icon icon="calendar" />}
+                                style={[styles.input, { backgroundColor: theme.colors.surface }]}
+                            />
+                        </View>
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                        <DateTimePicker
+                            value={dueDate ? new Date(dueDate) : new Date()}
+                            mode="date"
+                            display="default"
+                            onChange={(event, selectedDate) => {
+                                setShowDatePicker(false);
+                                if (selectedDate) {
+                                    setDueDate(selectedDate.toISOString().split('T')[0]);
+                                }
+                            }}
+                        />
+                    )}
                     {/* Structured split tag input */}
                     <View style={{ marginBottom: 8 }}>
                         <Text variant="labelMedium" style={{ marginBottom: 4, color: theme.colors.onSurface }}>Project Tag</Text>
@@ -565,12 +936,21 @@ const GroupDetailsScreen = () => {
                                 </Text>
                             </TouchableOpacity>
                             {showModalTagList && (
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                <ScrollView 
+                                    horizontal 
+                                    showsHorizontalScrollIndicator={false}
+                                    style={{ paddingVertical: 4 }}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                >
                                     {Array.from(new Set(tasks.map((t: any) => t.projectTag).filter(Boolean))).map((tag: any) => (
                                         <TouchableOpacity
                                             key={tag}
                                             onPress={() => { applyExistingTag(tag); setShowModalTagList(false); }}
-                                            style={[styles.filterChip, projectTag === tag && { backgroundColor: theme.colors.primary }]}
+                                            style={[
+                                                styles.filterChip, 
+                                                { borderColor: theme.colors.primary },
+                                                projectTag === tag && { backgroundColor: theme.colors.primary }
+                                            ]}
                                         >
                                             <Text style={{ color: projectTag === tag ? '#fff' : theme.colors.primary, fontSize: 12 }}>{tag}</Text>
                                         </TouchableOpacity>
@@ -668,7 +1048,7 @@ const GroupDetailsScreen = () => {
                 </Dialog>
 
                 <Modal visible={memberModalVisible} onDismiss={() => setMemberModalVisible(false)} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
-                    <Text variant="titleLarge">Add Member</Text>
+                    <Text variant="titleLarge">Invite Member</Text>
                     <TextInput
                         label="Member Email"
                         value={memberEmail}
@@ -678,18 +1058,201 @@ const GroupDetailsScreen = () => {
                         style={[styles.input, { backgroundColor: theme.colors.surface }]}
                     />
                     <Button mode="contained" onPress={handleAddMember} style={styles.createBtn}>
-                        Add Member
+                        Invite Member
                     </Button>
                 </Modal>
+
+                {/* Members List Modal */}
+                <Modal 
+                    visible={membersListModalVisible} 
+                    onDismiss={() => setMembersListModalVisible(false)} 
+                    contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface, maxHeight: '80%' }]}
+                >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                        <Text variant="titleLarge" style={{ fontWeight: 'bold' }}>Group Members ({members?.length || 0})</Text>
+                        <IconButton icon="close" size={24} onPress={() => setMembersListModalVisible(false)} style={{ margin: 0 }} />
+                    </View>
+                    
+                    <ScrollView style={{ marginBottom: 15 }} showsVerticalScrollIndicator={true}>
+                        {members?.map((member: any) => (
+                            <View key={member.id} style={styles.memberRow}>
+                                <View style={styles.memberInfo}>
+                                    <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primaryContainer }]}>
+                                        <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
+                                            {member.name.charAt(0).toUpperCase()}
+                                        </Text>
+                                    </View>
+                                    <View style={{ marginLeft: 12 }}>
+                                        <Text variant="bodyLarge" style={{ fontWeight: '500' }}>{member.name}</Text>
+                                        <Text variant="bodySmall" style={{ color: theme.colors.outline }}>
+                                            {member.role === 'admin' ? 'Admin' : 'Member'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {isAdmin && member.userId !== currentUserId && (
+                                    <IconButton
+                                        icon="delete-outline"
+                                        iconColor={theme.colors.error}
+                                        size={20}
+                                        onPress={() => handleRemoveMember(member.userId)}
+                                    />
+                                )}
+                            </View>
+                        ))}
+                    </ScrollView>
+
+                    {isAdmin && (
+                        <Button
+                            mode="contained"
+                            onPress={() => {
+                                setMembersListModalVisible(false);
+                                setMemberModalVisible(true);
+                            }}
+                            icon="account-plus"
+                            style={{ marginTop: 10 }}
+                        >
+                            Invite Member
+                        </Button>
+                    )}
+                </Modal>
+
+                {/* Bulk Reassign Modal */}
+                <Modal visible={bulkAssignVisible} onDismiss={() => setBulkAssignVisible(false)} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
+                    <Text variant="titleLarge" style={{ marginBottom: 15 }}>Bulk Reassign Tasks</Text>
+                    <ScrollView style={{ maxHeight: 200 }}>
+                        <TouchableOpacity
+                            onPress={() => handleBulkAssign(null)}
+                            style={styles.memberRow}
+                        >
+                            <Text style={{ marginLeft: 10 }}>Unassigned</Text>
+                        </TouchableOpacity>
+                        {members?.map((member: any) => (
+                            <TouchableOpacity
+                                key={member.userId}
+                                onPress={() => handleBulkAssign(member.userId)}
+                                style={styles.memberRow}
+                            >
+                                <View style={styles.memberInfo}>
+                                    <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primaryContainer, width: 28, height: 28 }]}>
+                                        <Text style={{ color: theme.colors.onPrimaryContainer, fontSize: 12, fontWeight: 'bold' }}>
+                                            {member.name.charAt(0).toUpperCase()}
+                                        </Text>
+                                    </View>
+                                    <Text style={{ marginLeft: 10 }}>{member.name}</Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </Modal>
+
+                {/* Bulk Delete Dialog */}
+                <Dialog visible={bulkDeleteDialogVisible} onDismiss={() => setBulkDeleteDialogVisible(false)} style={{ backgroundColor: theme.colors.surface }}>
+                    <Dialog.Title>Delete Multiple Tasks</Dialog.Title>
+                    <Dialog.Content>
+                        <Text>Are you sure you want to delete these {selectedTaskIds.size} tasks? This action cannot be undone.</Text>
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setBulkDeleteDialogVisible(false)}>Cancel</Button>
+                        <Button onPress={handleBulkDelete} textColor="red">Delete All</Button>
+                    </Dialog.Actions>
+                </Dialog>
             </Portal>
 
-            <FAB
-                style={styles.fab}
-                icon="plus"
-                onPress={showModal}
-                label="New Task"
-            />
+            {!bulkSelectMode && (
+                <FAB
+                    style={styles.fab}
+                    icon="plus"
+                    onPress={showModal}
+                    label="New Task"
+                />
+            )}
+
+            {/* Bulk Actions Panel at the Bottom */}
+            {bulkSelectMode && selectedTaskIds.size > 0 && (
+                <View style={[styles.bulkActionBar, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.outlineVariant }]}>
+                    <Text variant="labelLarge" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>
+                        {selectedTaskIds.size} Selected
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                        {/* Bulk Status Button */}
+                        <Menu
+                            visible={bulkStatusMenuVisible}
+                            onDismiss={() => setBulkStatusMenuVisible(false)}
+                            anchor={
+                                <IconButton
+                                    icon="check-circle-outline"
+                                    onPress={() => setBulkStatusMenuVisible(true)}
+                                    size={20}
+                                />
+                            }
+                        >
+                            <Menu.Item onPress={() => handleBulkStatusChange('todo')} title="To Do" />
+                            <Menu.Item onPress={() => handleBulkStatusChange('in_progress')} title="In Progress" />
+                            <Menu.Item onPress={() => handleBulkStatusChange('review')} title="In Review" />
+                            <Menu.Item onPress={() => handleBulkStatusChange('done')} title="Done" />
+                            <Menu.Item onPress={() => handleBulkStatusChange('blocked')} title="Blocked" />
+                        </Menu>
+
+                        {/* Bulk Priority Button */}
+                        <Menu
+                            visible={bulkPriorityMenuVisible}
+                            onDismiss={() => setBulkPriorityMenuVisible(false)}
+                            anchor={
+                                <IconButton
+                                    icon="alert-circle-outline"
+                                    onPress={() => setBulkPriorityMenuVisible(true)}
+                                    size={20}
+                                />
+                            }
+                        >
+                            <Menu.Item onPress={() => handleBulkPriorityChange('low')} title="Low" />
+                            <Menu.Item onPress={() => handleBulkPriorityChange('medium')} title="Medium" />
+                            <Menu.Item onPress={() => handleBulkPriorityChange('high')} title="High" />
+                        </Menu>
+
+                        {/* Bulk Reassign Button */}
+                        <IconButton
+                            icon="account-outline"
+                            onPress={() => setBulkAssignVisible(true)}
+                            size={20}
+                        />
+
+                        {/* Bulk Delete Button */}
+                        {isAdmin && (
+                            <IconButton
+                                icon="delete-outline"
+                                iconColor={theme.colors.error}
+                                onPress={() => setBulkDeleteDialogVisible(true)}
+                                size={20}
+                            />
+                        )}
+
+                        {/* Cancel Button */}
+                        <IconButton
+                            icon="close"
+                            onPress={() => {
+                                setSelectedTaskIds(new Set());
+                                setBulkSelectMode(false);
+                            }}
+                            size={20}
+                        />
+                    </View>
+                </View>
+            )}
         </View>
+
+        <TaskDetailSheet
+            task={selectedTask}
+            groupId={groupId}
+            members={members?.map((m: any) => ({ userId: m.userId, name: m.name, role: m.role }))}
+            currentUserId={currentUserId}
+            isAdmin={isAdmin}
+            onClose={closeTaskSheet}
+            sheetRef={sheetRef}
+            allTasks={tasks}
+        />
+        </GestureHandlerRootView>
     );
 };
 
@@ -762,6 +1325,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flexWrap: 'wrap',
+        rowGap: 6,
     },
     fab: {
         position: 'absolute',
@@ -830,12 +1394,46 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 32,
         paddingHorizontal: 12,
-        paddingVertical: 5,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#6200ee',
         marginRight: 8,
+        flexShrink: 0,
+    },
+    liveBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 12,
+        gap: 5,
+    },
+    liveDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    liveText: {
+        fontSize: 9,
+        fontWeight: 'bold',
+    },
+    bulkActionBar: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderTopWidth: 1,
+        elevation: 8,
     },
 });
 

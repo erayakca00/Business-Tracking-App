@@ -4,6 +4,8 @@ import { ArrowLeft, Plus, Play, CheckCircle, Trash2, Pencil, X, Zap, Clock, Targ
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
+import TaskDetailPanel from '../components/TaskDetailPanel';
+import CreateTaskModal from '../components/CreateTaskModal';
 
 const statusColors: Record<string, string> = {
     planned: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
@@ -25,6 +27,7 @@ export default function SprintPlanning() {
     const [group, setGroup] = useState<any>(null);
     const [sprints, setSprints] = useState<any[]>([]);
     const [backlog, setBacklog] = useState<any[]>([]);
+    const [members, setMembers] = useState<any[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -42,6 +45,11 @@ export default function SprintPlanning() {
     const [confirmComplete, setConfirmComplete] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+    // Task Modal state
+    const [selectedTask, setSelectedTask] = useState<any>(null);
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState<any>(null);
+
     const fetchData = async () => {
         try {
             const [groupRes, sprintsRes, backlogRes, membersRes] = await Promise.all([
@@ -53,6 +61,7 @@ export default function SprintPlanning() {
             setGroup(groupRes.data);
             setSprints(sprintsRes.data);
             setBacklog(backlogRes.data);
+            setMembers(membersRes.data);
 
             const membership = membersRes.data.find((m: any) => m.userId === user?.id);
             setIsAdmin(membership?.role === 'admin');
@@ -161,6 +170,21 @@ export default function SprintPlanning() {
             await fetchData();
         } catch (err) {
             console.error('Failed to remove task from sprint', err);
+        }
+    };
+
+    const handleEditTask = (task: any) => {
+        setEditingTask(task);
+        setIsTaskModalOpen(true);
+    };
+
+    const handleDeleteTask = async (taskId: string) => {
+        if (!window.confirm('Are you sure you want to delete this task?')) return;
+        try {
+            await api.delete(`/tasks/${taskId}`);
+            fetchData();
+        } catch (error) {
+            console.error('Failed to delete task', error);
         }
     };
 
@@ -300,6 +324,7 @@ export default function SprintPlanning() {
                             onComplete={() => setConfirmComplete(activeSprint.id)}
                             onDelete={() => setConfirmDelete(activeSprint.id)}
                             onRemoveTask={(taskId: string) => handleRemoveFromSprint(activeSprint.id, taskId)}
+                            onViewTask={(task: any) => setSelectedTask(task)}
                             daysRemaining={activeSprint.endDate ? daysRemaining(activeSprint.endDate) : null}
                         />
                     )}
@@ -320,6 +345,7 @@ export default function SprintPlanning() {
                                         onStart={() => handleStart(sprint.id)}
                                         onDelete={() => setConfirmDelete(sprint.id)}
                                         onRemoveTask={(taskId: string) => handleRemoveFromSprint(sprint.id, taskId)}
+                                        onViewTask={(task: any) => setSelectedTask(task)}
                                         daysRemaining={null}
                                     />
                                 ))}
@@ -341,6 +367,7 @@ export default function SprintPlanning() {
                                         onToggle={() => toggleExpand(sprint.id)}
                                         onDelete={() => setConfirmDelete(sprint.id)}
                                         onRemoveTask={() => {}}
+                                        onViewTask={(task: any) => setSelectedTask(task)}
                                         daysRemaining={null}
                                     />
                                 ))}
@@ -461,6 +488,31 @@ export default function SprintPlanning() {
                     </div>
                 </div>
             )}
+
+            <CreateTaskModal
+                isOpen={isTaskModalOpen}
+                onClose={() => setIsTaskModalOpen(false)}
+                groupId={groupId!}
+                onTaskCreated={fetchData}
+                taskToEdit={editingTask}
+                members={members}
+                isAdmin={isAdmin}
+                currentUserId={user?.id}
+                allTasks={[...backlog, ...sprints.flatMap(s => s.tasks || [])]}
+                sprints={sprints.filter(s => s.status !== 'completed')}
+                activeSprint={activeSprint}
+            />
+
+            <TaskDetailPanel
+                task={selectedTask}
+                members={members}
+                isAdmin={isAdmin}
+                currentUserId={user?.id}
+                onClose={() => setSelectedTask(null)}
+                onEdit={(task) => { setSelectedTask(null); handleEditTask(task); }}
+                onDelete={async (taskId) => { await handleDeleteTask(taskId); setSelectedTask(null); }}
+                onTaskUpdated={fetchData}
+            />
         </div>
     );
 }
@@ -468,7 +520,7 @@ export default function SprintPlanning() {
 // ── Sprint Card Sub-component ────────────────────────────────────────────────
 function SprintCard({
     sprint, isAdmin, expanded, onToggle,
-    onEdit, onStart, onComplete, onDelete, onRemoveTask, daysRemaining,
+    onEdit, onStart, onComplete, onDelete, onRemoveTask, onViewTask, daysRemaining,
 }: any) {
     const totalTasks = sprint.tasks?.length || 0;
     const doneTasks = sprint.tasks?.filter((t: any) => t.status === 'done').length || 0;
@@ -558,7 +610,7 @@ function SprintCard({
                         <p className="text-center text-sm text-gray-400 py-4">No tasks in this sprint yet</p>
                     )}
                     {sprint.tasks?.map((task: any) => (
-                        <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                        <div key={task.id} onClick={() => onViewTask && onViewTask(task)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer">
                             <div className={`w-2 h-2 rounded-full shrink-0 ${
                                 task.status === 'done' ? 'bg-green-500' :
                                 task.status === 'in_progress' ? 'bg-blue-500' :
@@ -582,7 +634,7 @@ function SprintCard({
                             </span>
                             {isAdmin && sprint.status !== 'completed' && (
                                 <button
-                                    onClick={() => onRemoveTask(task.id)}
+                                    onClick={(e) => { e.stopPropagation(); onRemoveTask(task.id); }}
                                     className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
                                     title="Remove from sprint"
                                 >

@@ -48,9 +48,9 @@ export const groupsApi = api.injectEndpoints({
             query: (groupId) => `/groups/${groupId}/users`,
             providesTags: (result, error, groupId) => [{ type: 'GroupMember', id: groupId }],
         }),
-        addGroupMember: builder.mutation<GroupMember, { groupId: string; email: string }>({
+        addGroupMember: builder.mutation<any, { groupId: string; email: string }>({
             query: ({ groupId, email }) => ({
-                url: `/groups/${groupId}/users`,
+                url: `/groups/${groupId}/invite`,
                 method: 'POST',
                 body: { email },
             }),
@@ -61,7 +61,14 @@ export const groupsApi = api.injectEndpoints({
                 url: `/groups/${groupId}/users/${userId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: (result, error, { groupId }) => [{ type: 'GroupMember', id: groupId }],
+            invalidatesTags: (result, error, { groupId }) => [{ type: 'GroupMember', id: groupId }, 'Group'],
+        }),
+        deleteGroup: builder.mutation<void, string>({
+            query: (id) => ({
+                url: `/groups/${id}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['Group'],
         }),
     }),
 });
@@ -73,4 +80,5 @@ export const {
     useGetGroupMembersQuery,
     useAddGroupMemberMutation,
     useRemoveGroupMemberMutation,
+    useDeleteGroupMutation,
 } = groupsApi;

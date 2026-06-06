@@ -130,6 +130,14 @@ const LoginScreen = () => {
             >
                 Don't have an account? Register
             </Button>
+
+            <Button
+                mode="text"
+                onPress={() => navigation.navigate('ForgotPassword' as never)}
+                style={styles.link}
+            >
+                Forgot your password?
+            </Button>
         </View>
     );
 };

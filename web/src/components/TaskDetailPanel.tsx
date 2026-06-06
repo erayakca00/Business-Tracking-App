@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Edit, Calendar, User, Tag, Clock, MessageCircle, ChevronDown, Trash2, Check, GitBranch, AlertCircle, ArrowRight, Paperclip, Download } from 'lucide-react';
+import { X, Edit, Calendar, User, Tag, Clock, MessageCircle, ChevronDown, Trash2, Check, GitBranch, AlertCircle, ArrowRight, Paperclip, Download, Copy, Sparkles } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -42,6 +42,12 @@ interface Task {
     updatedAt?: string;
     projectTag?: string;
     createdById?: string;
+    blockedBy?: Task[];
+    blocking?: Task[];
+    groupId?: string;
+    group?: { id: string; name: string };
+    aiSummary?: string;
+    aiSummaryUpdatedAt?: string;
 }
 
 interface Member {
@@ -60,6 +66,7 @@ interface TaskDetailPanelProps {
     onEdit: (task: Task) => void;
     onDelete: (taskId: string) => Promise<void>;
     onTaskUpdated: () => void;
+    socket?: any;
 }
 
 const STATUS_OPTIONS = [
@@ -108,6 +115,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     onEdit,
     onDelete,
     onTaskUpdated,
+    socket,
 }) => {
     const { user } = useAuth();
     const [comments, setComments] = useState<Comment[]>([]);
@@ -121,7 +129,26 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     const [showPriorityMenu, setShowPriorityMenu] = useState(false);
     const [localTask, setLocalTask] = useState<Task | null>(task);
     const [submitting, setSubmitting] = useState(false);
+    const [loadingSummary, setLoadingSummary] = useState(false);
     const commentInputRef = useRef<HTMLTextAreaElement>(null);
+
+    // Blocker state
+    const [groupTasks, setGroupTasks] = useState<Task[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showBlockerSearch, setShowBlockerSearch] = useState(false);
+    const [blockingError, setBlockingError] = useState<string | null>(null);
+
+    // Time tracking state
+    const [timeLogs, setTimeLogs] = useState<any[]>([]);
+    const [activeTimer, setActiveTimer] = useState<any | null>(null);
+    const [timerSeconds, setTimerSeconds] = useState(0);
+    const [timerNote, setTimerNote] = useState('');
+    const [showTimerNoteInput, setShowTimerNoteInput] = useState(false);
+    
+    // Manual time log state
+    const [manualHours, setManualHours] = useState('0');
+    const [manualMinutes, setManualMinutes] = useState('0');
+    const [manualNote, setManualNote] = useState('');
 
     // Mention state
     const [mentionQuery, setMentionQuery] = useState('');
@@ -135,14 +162,209 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const fetchTaskDetails = async (taskId: string) => {
+        try {
+            const res = await api.get(`/tasks/${taskId}`);
+            setLocalTask(res.data);
+        } catch (e) {
+            console.error('Failed to fetch task details:', e);
+        }
+    };
+
+    const handleSummarize = async () => {
+        if (!localTask) return;
+        setLoadingSummary(true);
+        try {
+            const res = await api.post(`/tasks/${localTask.id}/summarize`);
+            setLocalTask(res.data);
+        } catch (e) {
+            console.error('Failed to generate summary:', e);
+            alert('Failed to generate AI summary. Make sure GEMINI_API_KEY is configured.');
+        } finally {
+            setLoadingSummary(false);
+        }
+    };
+
+    const fetchGroupTasks = async (groupId: string) => {
+        try {
+            const res = await api.get(`/groups/${groupId}/tasks`);
+            const tasksArray = Array.isArray(res.data) ? res.data : (res.data.data || []);
+            setGroupTasks(tasksArray);
+        } catch (e) {
+            console.error('Failed to fetch group tasks:', e);
+        }
+    };
+
+    const fetchTimeLogs = async (taskId: string) => {
+        try {
+            const res = await api.get(`/tasks/${taskId}/time`);
+            setTimeLogs(res.data);
+            const active = res.data.find((log: any) => log.endedAt === null && log.userId === currentUserId);
+            setActiveTimer(active || null);
+        } catch (e) {
+            console.error('Failed to fetch time logs:', e);
+        }
+    };
+
+    const handleAddDependency = async (blockingTaskId: string) => {
+        if (!localTask) return;
+        setBlockingError(null);
+        try {
+            await api.post(`/tasks/${localTask.id}/dependencies`, { blockingTaskId });
+            await fetchTaskDetails(localTask.id);
+            onTaskUpdated();
+            setShowBlockerSearch(false);
+            setSearchQuery('');
+        } catch (err: any) {
+            const msg = err.response?.data?.message || 'Failed to add dependency';
+            setBlockingError(msg);
+        }
+    };
+
+    const handleRemoveDependency = async (blockingId: string) => {
+        if (!localTask) return;
+        try {
+            await api.delete(`/tasks/${localTask.id}/dependencies/${blockingId}`);
+            await fetchTaskDetails(localTask.id);
+            onTaskUpdated();
+        } catch (err: any) {
+            console.error('Failed to remove dependency:', err);
+        }
+    };
+
+    const handleStartTimer = async () => {
+        if (!localTask) return;
+        try {
+            await api.post(`/tasks/${localTask.id}/time/start`, { note: timerNote });
+            setTimerNote('');
+            setShowTimerNoteInput(false);
+            await fetchTimeLogs(localTask.id);
+        } catch (err: any) {
+            console.error('Failed to start timer:', err);
+        }
+    };
+
+    const handleStopTimer = async () => {
+        if (!localTask) return;
+        try {
+            await api.post(`/tasks/${localTask.id}/time/stop`);
+            await fetchTimeLogs(localTask.id);
+            refreshActivity(localTask.id);
+        } catch (err: any) {
+            console.error('Failed to stop timer:', err);
+        }
+    };
+
+    const handleLogTimeManually = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!localTask) return;
+        const hours = parseInt(manualHours, 10) || 0;
+        const minutes = parseInt(manualMinutes, 10) || 0;
+        const durationSeconds = (hours * 3600) + (minutes * 60);
+
+        if (durationSeconds <= 0) return;
+
+        try {
+            await api.post(`/tasks/${localTask.id}/time/manual`, {
+                durationSeconds,
+                note: manualNote
+            });
+            setManualHours('0');
+            setManualMinutes('0');
+            setManualNote('');
+            await fetchTimeLogs(localTask.id);
+            refreshActivity(localTask.id);
+        } catch (err: any) {
+            console.error('Failed to log manual time:', err);
+        }
+    };
+
+    const formatDuration = (seconds: number) => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) {
+            return `${h}h ${m}m`;
+        }
+        if (m > 0) {
+            return `${m}m ${s}s`;
+        }
+        return `${s}s`;
+    };
+
     useEffect(() => {
-        setLocalTask(task);
-        if (task) {
+        if (task && task.id && task.id !== 'undefined') {
+            fetchTaskDetails(task.id);
             fetchComments(task.id);
             fetchActivity(task.id);
             fetchAttachments(task.id);
+        } else {
+            setLocalTask(null);
         }
     }, [task]);
+
+    useEffect(() => {
+        if (localTask && localTask.id && localTask.id !== 'undefined') {
+            const gId = localTask.groupId || (localTask.group as any)?.id;
+            if (gId) {
+                fetchGroupTasks(gId);
+            }
+            fetchTimeLogs(localTask.id);
+        }
+    }, [localTask?.id]);
+
+    useEffect(() => {
+        let interval: any = null;
+        if (activeTimer) {
+            const start = new Date(activeTimer.startedAt).getTime();
+            setTimerSeconds(Math.floor((Date.now() - start) / 1000));
+
+            interval = setInterval(() => {
+                setTimerSeconds(Math.floor((Date.now() - start) / 1000));
+            }, 1000);
+        } else {
+            setTimerSeconds(0);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [activeTimer]);
+
+    useEffect(() => {
+        if (!socket || !localTask) return;
+
+        const handleCommentCreated = (comment: any) => {
+            if (comment.taskId === localTask.id) {
+                setComments(prev => {
+                    if (prev.some(c => c.id === comment.id)) return prev;
+                    return [...prev, comment];
+                });
+            }
+        };
+
+        const handleCommentDeleted = (data: { commentId: string, taskId: string }) => {
+            if (data.taskId === localTask.id) {
+                setComments(prev => prev.filter(c => c.id !== data.commentId));
+            }
+        };
+
+        const handleTaskUpdated = (updatedTask: any) => {
+            if (updatedTask.id === localTask.id) {
+                setLocalTask(updatedTask);
+                fetchActivity(updatedTask.id);
+            }
+        };
+
+        socket.on('comment:created', handleCommentCreated);
+        socket.on('comment:deleted', handleCommentDeleted);
+        socket.on('task:updated', handleTaskUpdated);
+
+        return () => {
+            socket.off('comment:created', handleCommentCreated);
+            socket.off('comment:deleted', handleCommentDeleted);
+            socket.off('task:updated', handleTaskUpdated);
+        };
+    }, [socket, localTask?.id]);
 
     const fetchAttachments = async (taskId: string) => {
         try {
@@ -168,6 +390,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     const handleFileUpload = async (files: FileList | File[]) => {
         if (!localTask || files.length === 0) return;
         setUploading(true);
+        let hasNew = false;
         for (let i = 0; i < files.length; i++) {
             const formData = new FormData();
             formData.append('file', files[i]);
@@ -176,9 +399,20 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 setAttachments(prev => [res.data, ...prev]);
+                hasNew = true;
             } catch (e) { console.error(e); }
         }
         setUploading(false);
+        if (hasNew) refreshActivity(localTask.id);
+    };
+
+    const handlePaste = (e: React.ClipboardEvent) => {
+        if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+            // Check if active element is an input/textarea and if we should prevent default
+            // Actually, for files, we always want to upload them and prevent default browser handling
+            e.preventDefault();
+            handleFileUpload(e.clipboardData.files);
+        }
     };
 
     const handleDeleteAttachment = async (id: string) => {
@@ -186,6 +420,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
         try {
             await api.delete(`/tasks/${localTask.id}/attachments/${id}`);
             setAttachments(prev => prev.filter(a => a.id !== id));
+            refreshActivity(localTask.id);
         } catch (e) { console.error(e); }
     };
 
@@ -220,6 +455,24 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
         } catch (e) { console.error(e); }
     };
 
+    const handleSaveAsTemplate = async () => {
+        if (!localTask) return;
+        const name = window.prompt('Enter a name for this template:');
+        if (!name || !name.trim()) return;
+
+        try {
+            const gId = localTask.groupId || (localTask.group as any)?.id;
+            await api.post(`/groups/${gId}/templates`, {
+                name: name.trim(),
+                taskId: localTask.id,
+            });
+            alert('Template saved successfully!');
+        } catch (err: any) {
+            console.error('Failed to save template:', err);
+            alert(err.response?.data?.message || 'Failed to save template');
+        }
+    };
+
     const handleStatusChange = async (status: string) => {
         if (!localTask) return;
         try {
@@ -244,6 +497,9 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
 
     if (!task || !localTask) return null;
 
+    const activeBlockers = localTask.blockedBy?.filter(b => b.status !== 'done') || [];
+    const isBlocked = activeBlockers.length > 0;
+
     const statusObj = STATUS_OPTIONS.find(s => s.value === localTask.status) || STATUS_OPTIONS[0];
     const priorityObj = PRIORITY_OPTIONS.find(p => p.value === localTask.priority) || PRIORITY_OPTIONS[1];
     const assignee = members.find(m => m.userId === localTask.assignedToId);
@@ -260,7 +516,10 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             />
 
             {/* Panel */}
-            <div className="fixed right-0 top-0 h-full w-full max-w-3xl bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col overflow-hidden transition-colors duration-200">
+            <div 
+                className="fixed right-0 top-0 h-full w-full max-w-3xl bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col overflow-hidden transition-colors duration-200"
+                onPaste={handlePaste}
+            >
                 {/* Top bar */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                     <div className="flex items-center gap-3 min-w-0">
@@ -275,6 +534,16 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                             >
                                 <Edit size={14} />
                                 Edit
+                            </button>
+                        )}
+                        {isAdmin && (
+                            <button
+                                onClick={handleSaveAsTemplate}
+                                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                                title="Save as Template"
+                            >
+                                <Copy size={14} />
+                                Save Template
                             </button>
                         )}
                         {isAdmin && (
@@ -297,7 +566,27 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                 {/* Body */}
                 <div className="flex flex-1 min-h-0">
                     {/* ── Left: description + activity ── */}
-                    <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-6 border-r border-gray-100 dark:border-gray-800">
+                    <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-6 border-r border-gray-100 dark:border-gray-800 font-sans">
+                        {/* Blocker warning banner */}
+                        {isBlocked && (
+                            <div className="bg-red-50 dark:bg-red-950/20 border-l-4 border-red-500 p-4 mb-4 rounded-r-lg flex items-start gap-3 flex-shrink-0">
+                                <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={16} />
+                                <div>
+                                    <p className="text-sm font-semibold text-red-800 dark:text-red-300">This task is currently blocked</p>
+                                    <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">
+                                        Resolve the following blocker tasks to change status:
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                        {activeBlockers.map(b => (
+                                            <span key={b.id} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">
+                                                {b.title}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Description */}
                         <section className="mb-6">
                             <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Description</h3>
@@ -306,6 +595,344 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                             ) : (
                                 <p className="text-sm text-gray-400 dark:text-gray-600 italic">No description provided.</p>
                             )}
+                        </section>
+
+                        {/* AI Task Summarizer */}
+                        <section className="mb-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Sparkles size={14} className="text-indigo-500" />
+                                    AI Task Summary
+                                </h3>
+                                {localTask.aiSummary && !loadingSummary && (
+                                    <button
+                                        onClick={handleSummarize}
+                                        className="text-xs font-medium text-indigo-650 dark:text-indigo-400 hover:text-indigo-750 dark:hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                                    >
+                                        Regenerate
+                                    </button>
+                                )}
+                            </div>
+
+                            {loadingSummary ? (
+                                <div className="bg-indigo-50/30 dark:bg-indigo-950/10 border border-indigo-100/50 dark:border-indigo-900/30 rounded-xl p-4 flex flex-col items-center justify-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles size={16} className="text-indigo-500 animate-spin" />
+                                        <span className="text-sm font-medium text-indigo-900 dark:text-indigo-300">Generating summary...</span>
+                                    </div>
+                                    <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                                        <div 
+                                            className="bg-indigo-650 h-full rounded-full animate-pulse" 
+                                            style={{ width: '40%' }} 
+                                        />
+                                    </div>
+                                </div>
+                            ) : localTask.aiSummary ? (
+                                <div className="bg-indigo-50/50 dark:bg-indigo-950/15 border border-indigo-100/40 dark:border-indigo-900/40 rounded-xl p-4.5 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-3 text-indigo-200 dark:text-indigo-900/20 pointer-events-none">
+                                        <Sparkles size={40} />
+                                    </div>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-normal">
+                                        {localTask.aiSummary}
+                                    </p>
+                                    {localTask.aiSummaryUpdatedAt && (
+                                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2.5 flex items-center gap-1 font-mono">
+                                            <Clock size={10} />
+                                            Generated {relativeTime(localTask.aiSummaryUpdatedAt)}
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl p-5 flex flex-col items-center justify-center text-center gap-3">
+                                    <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-full text-indigo-500 dark:text-indigo-400">
+                                        <Sparkles size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-300 font-sans">Summarize task with AI</p>
+                                        <p className="text-xs text-gray-450 dark:text-gray-500 max-w-sm mt-0.5">
+                                            Generate a quick 3-sentence summary of the task's progress, activity history, and comments.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={handleSummarize}
+                                        className="mt-1 px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-1.5"
+                                    >
+                                        <Sparkles size={14} />
+                                        Generate Summary
+                                    </button>
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Blocker Management Section */}
+                        <section className="mb-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+                            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                🔒 Task Dependencies
+                            </h3>
+
+                            {/* Blocked By List */}
+                            <div className="mb-4">
+                                <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2">Blocked By (Blockers)</h4>
+                                {(!localTask.blockedBy || localTask.blockedBy.length === 0) ? (
+                                    <p className="text-sm text-gray-400 dark:text-gray-600 italic">No tasks are blocking this task.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {localTask.blockedBy.map(b => (
+                                            <div key={b.id} className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-800/80 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-colors">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${b.status === 'done' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
+                                                        {b.status === 'done' ? 'Done' : 'Blocking'}
+                                                    </span>
+                                                    <span className="text-sm text-gray-900 dark:text-gray-200 truncate font-medium">{b.title}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveDependency(b.id)}
+                                                    className="p-1 text-gray-400 hover:text-red-500 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                                    title="Remove Blocker"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Blocking List */}
+                            <div className="mb-4">
+                                <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2">Blocking</h4>
+                                {(!localTask.blocking || localTask.blocking.length === 0) ? (
+                                    <p className="text-sm text-gray-400 dark:text-gray-600 italic">This task is not blocking any other tasks.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {localTask.blocking.map(b => (
+                                            <div key={b.id} className="flex items-center p-2.5 bg-gray-50 dark:bg-gray-800/80 rounded-lg border border-transparent">
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold mr-2 ${b.status === 'done' ? 'bg-green-100 dark:bg-green-900/40 text-green-700' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700'}`}>
+                                                    {b.status}
+                                                </span>
+                                                <span className="text-sm text-gray-900 dark:text-gray-200 truncate font-medium">{b.title}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Add Blocker Picker */}
+                            <div className="mt-3 relative">
+                                {!showBlockerSearch ? (
+                                    <button
+                                        onClick={() => { setShowBlockerSearch(true); setBlockingError(null); }}
+                                        className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1"
+                                    >
+                                        + Add Blocker
+                                    </button>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={searchQuery}
+                                                onChange={e => setSearchQuery(e.target.value)}
+                                                placeholder="Search task to add as blocker..."
+                                                className="w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                autoFocus
+                                            />
+                                            <button
+                                                onClick={() => { setShowBlockerSearch(false); setSearchQuery(''); setBlockingError(null); }}
+                                                className="text-xs px-2.5 py-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                        {blockingError && (
+                                            <p className="text-xs text-red-500 font-medium">{blockingError}</p>
+                                        )}
+                                        {searchQuery && (
+                                            <div className="absolute z-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg mt-1 w-full max-h-48 overflow-y-auto">
+                                                {(() => {
+                                                    const availableBlockerTasks = groupTasks.filter(t => {
+                                                        if (t.id === localTask.id) return false;
+                                                        if (localTask.blockedBy?.some(b => b.id === t.id)) return false;
+                                                        return t.title.toLowerCase().includes(searchQuery.toLowerCase());
+                                                    });
+                                                    return availableBlockerTasks.length === 0 ? (
+                                                        <p className="text-xs text-gray-400 dark:text-gray-600 italic p-3 text-center">No tasks match search query.</p>
+                                                    ) : (
+                                                        availableBlockerTasks.map(t => (
+                                                            <button
+                                                                key={t.id}
+                                                                onClick={() => handleAddDependency(t.id)}
+                                                                className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-xs font-medium text-gray-900 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 last:border-0 flex justify-between items-center"
+                                                            >
+                                                                <span className="truncate mr-2">{t.title}</span>
+                                                                <span className="text-[10px] text-gray-400 px-1 rounded bg-gray-100 dark:bg-gray-700">{t.status}</span>
+                                                            </button>
+                                                        ))
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
+                        {/* Time Tracking Section */}
+                        <section className="mb-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+                            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                <Clock size={14} /> Time Tracking
+                            </h3>
+
+                            {/* Active Timer Controls */}
+                            <div className="bg-indigo-50/50 dark:bg-indigo-950/10 rounded-xl p-4 mb-4 border border-indigo-100/30 dark:border-indigo-900/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                {activeTimer ? (
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-2.5 w-2.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+                                        <div>
+                                            <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300">Active Timer Running</p>
+                                            {activeTimer.note && (
+                                                <p className="text-xs text-indigo-700 dark:text-indigo-400 italic">"{activeTimer.note}"</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">No active timer</p>
+                                        <p className="text-[11px] text-gray-400">Track your progress live or log hours manually below.</p>
+                                    </div>
+                                )}
+
+                                <div className="flex items-center gap-3">
+                                    {activeTimer ? (
+                                        <>
+                                            <span className="text-sm font-mono font-bold text-indigo-900 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/40 px-2.5 py-1 rounded-md">
+                                                {(() => {
+                                                    const hrs = Math.floor(timerSeconds / 3600);
+                                                    const mins = Math.floor((timerSeconds % 3600) / 60);
+                                                    const secs = timerSeconds % 60;
+                                                    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                                                })()}
+                                            </span>
+                                            <button
+                                                onClick={handleStopTimer}
+                                                className="px-3.5 py-1.5 text-xs font-semibold bg-red-650 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-1"
+                                            >
+                                                Stop Timer
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col gap-2 w-full md:w-auto">
+                                            {showTimerNoteInput ? (
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={timerNote}
+                                                        onChange={e => setTimerNote(e.target.value)}
+                                                        placeholder="What are you working on?"
+                                                        className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none"
+                                                    />
+                                                    <button
+                                                        onClick={handleStartTimer}
+                                                        className="px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700"
+                                                    >
+                                                        Start
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { setShowTimerNoteInput(false); setTimerNote(''); }}
+                                                        className="text-xs text-gray-400 hover:text-gray-600"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setShowTimerNoteInput(true)}
+                                                    className="px-3.5 py-1.5 text-xs font-semibold bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+                                                >
+                                                    Start Timer
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Manual Time Logger Form */}
+                            <div className="bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl p-4 mb-4 space-y-3">
+                                <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300">Log Time Manually</h4>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] text-gray-400 font-medium mb-1">Hours</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={manualHours}
+                                            onChange={e => setManualHours(e.target.value)}
+                                            className="w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] text-gray-400 font-medium mb-1">Minutes</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="59"
+                                            value={manualMinutes}
+                                            onChange={e => setManualMinutes(e.target.value)}
+                                            className="w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <div className="flex-[3]">
+                                        <label className="block text-[10px] text-gray-400 font-medium mb-1">Note / Description</label>
+                                        <input
+                                            type="text"
+                                            value={manualNote}
+                                            onChange={e => setManualNote(e.target.value)}
+                                            placeholder="What did you do?"
+                                            className="w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <div className="flex-shrink-0 pt-4">
+                                        <button
+                                            onClick={handleLogTimeManually}
+                                            className="px-3 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs font-semibold rounded-lg hover:bg-black dark:hover:bg-gray-600 transition-colors"
+                                        >
+                                            Log Time
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Time Logs History */}
+                            <div>
+                                <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2">Logged History</h4>
+                                {timeLogs.length === 0 ? (
+                                    <p className="text-xs text-gray-400 dark:text-gray-650 italic">No time logged for this task yet.</p>
+                                ) : (
+                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                        {timeLogs.map(log => (
+                                            <div key={log.id} className="flex items-start justify-between p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg text-xs">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                                        <span className="font-semibold text-gray-900 dark:text-white">{log.user?.name || 'Unknown User'}</span>
+                                                        <span className="text-[10px] text-gray-400 font-mono">
+                                                            {new Date(log.startedAt).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+                                                    {log.note ? (
+                                                        <p className="text-gray-605 dark:text-gray-400 italic font-medium">"{log.note}"</p>
+                                                    ) : (
+                                                        <p className="text-gray-400 italic">No description</p>
+                                                    )}
+                                                </div>
+                                                <span className="font-bold text-gray-900 dark:text-white bg-gray-105 dark:bg-gray-700 px-1.5 py-0.5 rounded ml-2 flex-shrink-0">
+                                                    {formatDuration(log.duration || 0)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </section>
 
                         {/* Attachments Section */}
@@ -332,7 +959,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                             >
                                 {attachments.length === 0 ? (
                                     <div className="text-center">
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Drag and drop files here, or <button onClick={() => fileInputRef.current?.click()} className="text-indigo-600 dark:text-indigo-400 hover:underline">browse</button></p>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Drag and drop files here, paste (Ctrl+V), or <button onClick={() => fileInputRef.current?.click()} className="text-indigo-600 dark:text-indigo-400 hover:underline">browse</button></p>
                                         {uploading && <p className="text-xs text-indigo-500 mt-2 font-medium">Uploading...</p>}
                                     </div>
                                 ) : (
@@ -606,6 +1233,14 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                                                 icon = <Edit size={14} className="text-gray-500 flex-shrink-0 mt-0.5" />;
                                                 text = <><span className="font-semibold">{actorName}</span> updated description</>;
                                                 break;
+                                            case 'attachment_added':
+                                                icon = <Paperclip size={14} className="text-blue-500 flex-shrink-0 mt-0.5" />;
+                                                text = <><span className="font-semibold">{actorName}</span> attached a file <span className="font-medium text-xs bg-gray-100 dark:bg-gray-700 px-1 rounded">{entry.data?.to}</span></>;
+                                                break;
+                                            case 'attachment_deleted':
+                                                icon = <Trash2 size={14} className="text-red-500 flex-shrink-0 mt-0.5" />;
+                                                text = <><span className="font-semibold">{actorName}</span> deleted an attachment <span className="font-medium text-xs bg-gray-100 dark:bg-gray-700 px-1 rounded">{entry.data?.from}</span></>;
+                                                break;
                                             default:
                                                 text = <><span className="font-semibold">{actorName}</span> made a change</>;
                                         }
@@ -640,15 +1275,23 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                                 </button>
                                 {showStatusMenu && (
                                     <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10 overflow-hidden">
-                                        {STATUS_OPTIONS.map(s => (
-                                            <button
-                                                key={s.value}
-                                                onClick={() => handleStatusChange(s.value)}
-                                                className={`block w-full text-left px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${s.value === localTask.status ? 'bg-gray-50 dark:bg-gray-700' : ''}`}
-                                            >
-                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${s.color}`}>{s.label}</span>
-                                            </button>
-                                        ))}
+                                        {STATUS_OPTIONS.map(s => {
+                                            const isOptionDisabled = isBlocked && s.value !== 'todo' && s.value !== 'blocked';
+                                            return (
+                                                <button
+                                                    key={s.value}
+                                                    onClick={() => {
+                                                        if (isOptionDisabled) return;
+                                                        handleStatusChange(s.value);
+                                                    }}
+                                                    disabled={isOptionDisabled}
+                                                    className={`block w-full text-left px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${s.value === localTask.status ? 'bg-gray-50 dark:bg-gray-700' : ''} ${isOptionDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                                >
+                                                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${s.color}`}>{s.label}</span>
+                                                    {isOptionDisabled && <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">Locked 🔒</span>}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

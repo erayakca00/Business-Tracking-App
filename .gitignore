@@ -1,57 +1,139 @@
-# Dependencies
+# ==========================================
+# Dependencies & Package Managers
+# ==========================================
 node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
-yarn.lock
 
-# Environment
+# ==========================================
+# Secret Credentials & Sensitive Files (Security)
+# ==========================================
 .env
 .env.local
+.env.development
+.env.production
+.env.staging
+.env.test
 .env.*.local
+*.pem
+*.key
+*.cert
+*.crt
+*.der
+*.p12
+*.pfx
+*.keystore
+*.jks
+*service-account.json
+firebase-service-account.json
+google-services.json
+GoogleService-Info.plist
+secrets/
+credentials/
+config/jwt/
 
-# IDE
+# ==========================================
+# Build Outputs & Artifacts
+# ==========================================
+dist/
+build/
+out/
+bin/
+obj/
+*.log
+.cache/
+.npm/
+.yarn/
+.expo/
+.expo-shared/
+.metro/
+.bundle/
+*.pid
+
+# ==========================================
+# Database & Cache Files
+# ==========================================
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+pgdata/
+pgadmin/
+docker/data/
+
+# ==========================================
+# Test Files (Do not need for running the app)
+# ==========================================
+__tests__/
+**/__tests__/
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.jsx
+*.spec.ts
+*.spec.tsx
+test/
+tests/
+coverage/
+.nyc_output/
+*.test.js.snap
+
+# ==========================================
+# Database Migrations (Past Migrations)
+# ==========================================
+backend/src/database/migrations/
+**/migrations/*.ts
+**/migrations/*.js
+
+# ==========================================
+# Documentation & Markdown Files
+# ==========================================
+**/*.md
+!README.md
+!README.mdoc
+docs/
+
+# ==========================================
+# IDE & Editor Settings
+# ==========================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *.sublime-*
+.project
+.classpath
+.settings/
+*.iml
 
-# OS
+# ==========================================
+# Operating System Junk
+# ==========================================
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+ehthumbs.db
 desktop.ini
 
-# Build
-dist/
-build/
-*.log
-.cache/
-
-# Docker
-docker/data/
-*.pid
-
-# Mobile specific
+# ==========================================
+# Mobile Specific (Android & iOS)
+# ==========================================
 *.apk
+*.aab
 *.ipa
-*.jks
-*.keystore
-.expo/
-.expo-shared/
-
-# Android
-*.iml
-.gradle
 /android/local.properties
 /android/.gradle
 /android/captures/
 /android/app/release/
 /android/app/debug/
 /android/.idea
-
-# iOS
 /ios/Pods/
 /ios/build/
 *.pbxuser
@@ -67,29 +149,5 @@ xcuserdata
 *.moved-aside
 DerivedData
 *.hmap
-*.ipa
 *.xcuserstate
 project.xcworkspace
-
-# Testing
-coverage/
-.nyc_output/
-*.test.js.snap
-
-# Misc
-.DS_Store
-*.pem
-*.log
-.env.test
-.env.production
-
-# Markdown & Docs
-*.md
-!README.md
-!README.mdoc
-
-# Local Database
-*.sqlite
-*.sqlite3
-pgdata/
-pgadmin/

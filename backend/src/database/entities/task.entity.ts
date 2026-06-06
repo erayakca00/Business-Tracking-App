@@ -1,114 +1,140 @@
 import {
-    Entity,
-    PrimaryGeneratedColumn,
-    Column,
-    CreateDateColumn,
-    UpdateDateColumn,
-    ManyToOne,
-    JoinColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { User } from './user.entity';
 import { Sprint } from './sprint.entity';
 import { Group } from './group.entity';
 
 export enum TaskStatus {
-    TODO = 'todo',
-    IN_PROGRESS = 'in_progress',
-    REVIEW = 'review',
-    DONE = 'done',
-    BLOCKED = 'blocked',
+  TODO = 'todo',
+  IN_PROGRESS = 'in_progress',
+  REVIEW = 'review',
+  DONE = 'done',
+  BLOCKED = 'blocked',
 }
 
 export enum TaskPriority {
-    LOW = 'low',
-    MEDIUM = 'medium',
-    HIGH = 'high',
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
 }
 
 @Entity('tasks')
 export class Task {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ name: 'group_id' })
-    groupId: string;
+  @Index()
+  @Column({ name: 'group_id' })
+  groupId: string;
 
-    @Column({ name: 'assigned_to', nullable: true })
-    assignedToId: string;
+  @Index()
+  @Column({ name: 'assigned_to', nullable: true })
+  assignedToId: string;
 
-    @Column({ name: 'created_by' })
-    createdById: string;
+  @Column({ name: 'created_by' })
+  createdById: string;
 
-    @Column()
-    title: string;
+  @Column()
+  title: string;
 
-    @Column({ type: 'text', nullable: true })
-    description: string;
+  @Column({ type: 'text', nullable: true })
+  description: string;
 
-    @Column({
-        type: 'enum',
-        enum: TaskStatus,
-        default: TaskStatus.TODO,
-    })
-    status: TaskStatus;
+  @Index()
+  @Column({
+    type: 'enum',
+    enum: TaskStatus,
+    default: TaskStatus.TODO,
+  })
+  status: TaskStatus;
 
-    @Column({
-        type: 'enum',
-        enum: TaskPriority,
-        default: TaskPriority.MEDIUM,
-    })
-    priority: TaskPriority;
+  @Column({
+    type: 'enum',
+    enum: TaskPriority,
+    default: TaskPriority.MEDIUM,
+  })
+  priority: TaskPriority;
 
-    @Column({ type: 'timestamp', nullable: true })
-    deadline: Date;
+  @Column({ type: 'timestamp', nullable: true })
+  deadline: Date;
 
-    @Column({ name: 'estimated_hours', type: 'integer', nullable: true })
-    estimatedHours: number;
+  @Column({ name: 'estimated_hours', type: 'integer', nullable: true })
+  estimatedHours: number;
 
-    @Column({ type: 'integer', nullable: true })
-    effort: number; // 1 (trivial) to 5 (very complex)
+  @Column({ type: 'integer', nullable: true })
+  effort: number; // 1 (trivial) to 5 (very complex)
 
-    @Column({ type: 'jsonb', nullable: true, name: 'required_skills' })
-    requiredSkills: string[];
+  @Column({ type: 'jsonb', nullable: true, name: 'required_skills' })
+  requiredSkills: string[];
 
-    @CreateDateColumn({ name: 'created_at' })
-    createdAt: Date;
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
 
-    @UpdateDateColumn({ name: 'updated_at' })
-    updatedAt: Date;
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
 
-    @Column({ name: 'due_date', type: 'timestamp', nullable: true })
-    dueDate: Date;
+  @Column({ name: 'due_date', type: 'timestamp', nullable: true })
+  dueDate: Date;
 
-    @Column({ name: 'project_tag', nullable: true })
-    projectTag: string;
+  @Column({ name: 'project_tag', nullable: true })
+  projectTag: string;
 
-    @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
-    completedAt: Date;
+  @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
+  completedAt: Date;
 
-    @Column({ name: 'sprint_id', nullable: true })
-    sprintId: string | null;
+  @Column({ name: 'sprint_id', nullable: true })
+  sprintId: string | null;
 
-    @ManyToOne(() => Group, (group) => group.tasks, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'group_id' })
-    group: Group;
+  @ManyToOne(() => Group, (group) => group.tasks, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'group_id' })
+  group: Group;
 
-    @ManyToOne(() => Sprint, (sprint) => sprint.tasks, { nullable: true, onDelete: 'SET NULL' })
-    @JoinColumn({ name: 'sprint_id' })
-    sprint: Sprint;
+  @ManyToOne(() => Sprint, (sprint) => sprint.tasks, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'sprint_id' })
+  sprint: Sprint;
 
-    @ManyToOne(() => User, (user) => user.assignedTasks, { nullable: true })
-    @JoinColumn({ name: 'assigned_to' })
-    assignedTo: User;
+  @ManyToOne(() => User, (user) => user.assignedTasks, { nullable: true })
+  @JoinColumn({ name: 'assigned_to' })
+  assignedTo: User;
 
-    @ManyToOne(() => User, (user) => user.createdTasks)
-    @JoinColumn({ name: 'created_by' })
-    createdBy: User;
+  @ManyToOne(() => User, (user) => user.createdTasks)
+  @JoinColumn({ name: 'created_by' })
+  createdBy: User;
 
-    @Column({ name: 'depends_on_id', nullable: true })
-    dependsOnId: string | null;
+  @Column({ name: 'ai_summary', type: 'text', nullable: true })
+  aiSummary: string | null;
 
-    @ManyToOne(() => Task, { nullable: true, onDelete: 'SET NULL' })
-    @JoinColumn({ name: 'depends_on_id' })
-    dependsOn: Task;
+  @Column({ name: 'ai_summary_updated_at', type: 'timestamp', nullable: true })
+  aiSummaryUpdatedAt: Date | null;
+
+  @Column({ name: 'depends_on_id', nullable: true })
+  dependsOnId: string | null;
+
+  @ManyToOne(() => Task, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'depends_on_id' })
+  dependsOn: Task;
+
+  @ManyToMany(() => Task, (task) => task.blocking)
+  @JoinTable({
+    name: 'task_dependencies',
+    joinColumn: { name: 'blocked_task_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'blocking_task_id', referencedColumnName: 'id' },
+  })
+  blockedBy: Task[];
+
+  @ManyToMany(() => Task, (task) => task.blockedBy)
+  blocking: Task[];
 }

@@ -7,33 +7,34 @@ import { Repository } from 'typeorm';
 import { User } from '../../database/entities/user.entity';
 
 export interface JwtPayload {
-    sub: string; // user id
-    email: string;
+  sub: string; // user id
+  email: string;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-    constructor(
-        private configService: ConfigService,
-        @InjectRepository(User)
-        private userRepository: Repository<User>,
-    ) {
-        super({
-            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-            ignoreExpiration: false,
-            secretOrKey: configService.get<string>('JWT_SECRET') || 'default-secret-key',
-        });
+  constructor(
+    private configService: ConfigService,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+  ) {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey:
+        configService.get<string>('JWT_SECRET') || 'default-secret-key',
+    });
+  }
+
+  async validate(payload: JwtPayload): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
     }
 
-    async validate(payload: JwtPayload): Promise<User> {
-        const user = await this.userRepository.findOne({
-            where: { id: payload.sub },
-        });
-
-        if (!user) {
-            throw new UnauthorizedException('User not found');
-        }
-
-        return user;
-    }
+    return user;
+  }
 }

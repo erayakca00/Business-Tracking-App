@@ -4,7 +4,7 @@ import { logout } from '../features/auth/authSlice';
 
 // Android Emulator basic localhost mapping is 10.0.2.2
 // For physical device, you must use your computer's LAN IP address (e.g., 192.168.1.x)
-export const BASE_URL = 'http://192.168.1.136:3000/api/v1';
+export const BASE_URL = 'http://192.168.0.11:3000/api/v1';
 
 const baseQuery = fetchBaseQuery({
     baseUrl: BASE_URL,
@@ -28,6 +28,6 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
     reducerPath: 'api',
     baseQuery: baseQueryWithReauth,
-    tagTypes: ['User', 'Group', 'Task', 'GroupMember'],
+    tagTypes: ['User', 'Group', 'Task', 'GroupMember', 'Comment', 'Activity', 'Notification', 'Attachment', 'TimeLog', 'Sprint', 'Backlog', 'Template'],
     endpoints: () => ({}),
 });

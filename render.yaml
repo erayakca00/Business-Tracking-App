@@ -1,0 +1,109 @@
+databases:
+  # Managed PostgreSQL Database Instance
+  - name: business-tracking-db
+    databaseName: business_tracking
+    user: dbuser
+    plan: free
+
+services:
+  # Backend NestJS Web Service
+  - type: web
+    name: business-tracking-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    preDeployCommand: npx typeorm migration:run -d dist/database/data-source.js
+    startCommand: npm run start:prod
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: API_PREFIX
+        value: api/v1
+      
+      # Database Credentials (Linked from Managed Database)
+      - key: DATABASE_HOST
+        fromDatabase:
+          name: business-tracking-db
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: business-tracking-db
+          property: port
+      - key: DATABASE_USER
+        fromDatabase:
+          name: business-tracking-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: business-tracking-db
+          property: password
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: business-tracking-db
+          property: database
+      - key: DATABASE_URL
+        fromDatabase:
+          name: business-tracking-db
+          property: connectionString
+
+      # Auth & API Credentials
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false # User will provide their Gemini API key in Render Dashboard
+
+      # CORS Origin restricted to the Web Frontend
+      - key: CORS_ORIGIN
+        fromService:
+          name: business-tracking-web
+          type: web
+          property: host
+
+      # Firebase Admin Service Account path (Optional, defaults to local folder if omitted)
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        value: firebase-service-account.json
+
+      # Cloudflare R2 / S3 Storage Credentials (Optional, defaults to local folder if omitted)
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_PUBLIC_URL
+        sync: false
+
+    # secretFiles configuration (mounts firebase credentials in NestJS root directory)
+    secretFiles:
+      - key: firebase-service-account.json
+        path: firebase-service-account.json
+
+  # Web Client React Static Site
+  - type: web
+    name: business-tracking-web
+    env: static
+    plan: free
+    rootDir: web
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    routes:
+      # Rewrite rule to handle React Router client-side routing fallback
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: business-tracking-backend
+          type: web
+          property: host
+      - key: VITE_SOCKET_URL
+        fromService:
+          name: business-tracking-backend
+          type: web
+          property: host

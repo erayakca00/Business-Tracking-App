@@ -1,41 +1,48 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Task } from './task.entity';
 import { User } from './user.entity';
 
 @Entity('task_attachments')
 export class TaskAttachment {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column()
-    taskId: string;
+  @Column()
+  taskId: string;
 
-    @ManyToOne(() => Task, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'taskId' })
-    task: Task;
+  @ManyToOne(() => Task, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'taskId' })
+  task: Task;
 
-    @Column()
-    userId: string;
+  @Column()
+  userId: string;
 
-    @ManyToOne(() => User)
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column()
-    filename: string;
+  @Column()
+  filename: string;
 
-    @Column()
-    originalName: string;
+  @Column()
+  originalName: string;
 
-    @Column()
-    mimeType: string;
+  @Column()
+  mimeType: string;
 
-    @Column()
-    size: number;
+  @Column()
+  size: number;
 
-    @Column()
-    url: string;
+  @Column()
+  url: string;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 }

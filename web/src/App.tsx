@@ -4,8 +4,13 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import GroupDetails from './pages/GroupDetails';
 import SprintPlanning from './pages/SprintPlanning';
+import Analytics from './pages/Analytics';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
+import AcceptInvite from './pages/AcceptInvite';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -13,6 +18,10 @@ function App() {
         <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/invite" element={<AcceptInvite />} />
             <Route
                 path="/dashboard"
                 element={
@@ -34,6 +43,14 @@ function App() {
                 element={
                     <ProtectedRoute>
                         <SprintPlanning />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/groups/:groupId/analytics"
+                element={
+                    <ProtectedRoute>
+                        <Analytics />
                     </ProtectedRoute>
                 }
             />
