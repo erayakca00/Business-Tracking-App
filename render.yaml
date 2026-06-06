@@ -78,19 +78,14 @@ services:
       - key: R2_PUBLIC_URL
         sync: false
 
-    # secretFiles configuration (mounts firebase credentials in NestJS root directory)
-    secretFiles:
-      - key: firebase-service-account.json
-        path: firebase-service-account.json
-
   # Web Client React Static Site
   - type: web
     name: business-tracking-web
-    env: static
+    runtime: static
     plan: free
     rootDir: web
     buildCommand: npm install && npm run build
-    publishPath: dist
+    staticPublishPath: dist
     routes:
       # Rewrite rule to handle React Router client-side routing fallback
       - type: rewrite

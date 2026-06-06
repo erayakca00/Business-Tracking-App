@@ -7,11 +7,12 @@
     "version": "1.0.0",
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "2d01e0c7-92aa-4618-8803-1a7fb3893bbc"
       }
     },
     "plugins": [
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "owner": "erayakca00"
   }
 }
