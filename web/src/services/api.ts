@@ -3,6 +3,15 @@ import axios from 'axios';
 // Get baseline API URL configuration
 let rawApiUrl = (import.meta as any).env.VITE_API_URL || '';
 
+// Ensure the URL has a protocol scheme.
+// Render's fromService `host` property injects just the hostname
+// (e.g. "business-tracking-backend.onrender.com") without https://.
+// Without a protocol, axios treats it as a relative path and requests
+// go to the frontend origin instead of the backend.
+if (rawApiUrl && !/^https?:\/\//i.test(rawApiUrl)) {
+    rawApiUrl = `https://${rawApiUrl}`;
+}
+
 // Ensure absolute URLs have the proper /api/v1 prefix appended
 if (rawApiUrl && !rawApiUrl.endsWith('/api/v1')) {
     rawApiUrl = rawApiUrl.endsWith('/') ? `${rawApiUrl}api/v1` : `${rawApiUrl}/api/v1`;

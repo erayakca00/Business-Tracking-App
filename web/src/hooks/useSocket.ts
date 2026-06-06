@@ -17,7 +17,11 @@ export const useSocket = (groupId?: string) => {
             return;
         }
 
-        const socketUrl = (import.meta as any).env.VITE_SOCKET_URL || 'http://localhost:3000';
+        let socketUrl = (import.meta as any).env.VITE_SOCKET_URL || 'http://localhost:3000';
+        // Render injects the hostname without a protocol scheme — prepend https://
+        if (socketUrl && !/^https?:\/\//i.test(socketUrl)) {
+            socketUrl = `https://${socketUrl}`;
+        }
         
         // Initialize Socket.IO connection with JWT token inside handshake auth
         const socket = io(socketUrl, {

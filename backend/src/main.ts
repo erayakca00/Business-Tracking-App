@@ -32,9 +32,15 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
 
-  // Enable CORS
+  // Enable CORS — Render's fromService `host` injects hostnames without protocol
+  const corsOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => {
+        const trimmed = o.trim();
+        return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      })
+    : '*';
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') || '*',
+    origin: corsOrigins,
     credentials: true,
   });
 
