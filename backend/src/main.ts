@@ -12,7 +12,31 @@ async function bootstrap() {
   // Enable trust proxy for rate limiting behind reverse proxies (like Railway)
   app.set('trust proxy', 1);
 
-  // Global security headers
+  // Enable CORS BEFORE other middleware so preflight OPTIONS requests
+  // get the correct headers before Helmet or other middleware can interfere.
+  const corsOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => {
+        let trimmed = o.trim();
+        // Guard against Render injecting only the internal service name
+        // (no dots) instead of the full public hostname.
+        if (trimmed && !/^https?:\/\//i.test(trimmed) && !trimmed.includes('.')) {
+          console.warn(
+            `[CORS] Origin "${trimmed}" looks like a bare service name. Appending ".onrender.com".`,
+          );
+          trimmed = `${trimmed}.onrender.com`;
+        }
+        return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      })
+    : '*';
+  console.log('[CORS] Allowed origins:', corsOrigins);
+  app.enableCors({
+    origin: corsOrigins,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
+
+  // Global security headers (after CORS so preflight isn't blocked)
   app.use(
     helmet({
       contentSecurityPolicy: false, // relaxed for development and socket connections
@@ -30,18 +54,6 @@ async function bootstrap() {
   // Serve static files from the uploads directory
   app.useStaticAssets(uploadDir, {
     prefix: '/uploads/',
-  });
-
-  // Enable CORS — Render's fromService `host` injects hostnames without protocol
-  const corsOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((o) => {
-        const trimmed = o.trim();
-        return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-      })
-    : '*';
-  app.enableCors({
-    origin: corsOrigins,
-    credentials: true,
   });
 
   // Global validation pipe
