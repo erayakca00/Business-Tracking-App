@@ -40,6 +40,7 @@ export class AttachmentsService {
       this.s3Client = new S3Client({
         region: 'auto',
         endpoint: endpoint,
+        forcePathStyle: true,
         credentials: {
           accessKeyId: accessKeyId,
           secretAccessKey: secretAccessKey,
