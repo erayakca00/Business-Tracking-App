@@ -1,6 +1,15 @@
 import axios from 'axios';
 
-const API_URL = (import.meta as any).env.VITE_API_URL || '/api/v1';
+// Get baseline API URL configuration
+let rawApiUrl = (import.meta as any).env.VITE_API_URL || '';
+
+// Ensure absolute URLs have the proper /api/v1 prefix appended
+if (rawApiUrl && !rawApiUrl.endsWith('/api/v1')) {
+    rawApiUrl = rawApiUrl.endsWith('/') ? `${rawApiUrl}api/v1` : `${rawApiUrl}/api/v1`;
+}
+
+// Fallback to relative path if not configured
+const API_URL = rawApiUrl || '/api/v1';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -18,7 +27,18 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // Detect if the response is actually the index.html fallback due to a 404 rewritten by SPA routing rules
+        if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+            return Promise.reject({
+                response: {
+                    status: 404,
+                    data: { message: 'API endpoint not found (returned HTML index page).' }
+                }
+            });
+        }
+        return response;
+    },
     (error) => {
         if (error.response && (error.response.status === 401 || error.response.status === 403)) {
             // Prevent redirect loop if already on login or register
