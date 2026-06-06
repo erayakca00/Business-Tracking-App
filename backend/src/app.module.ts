@@ -64,6 +64,6 @@ import { XssSanitizerMiddleware } from './common/middleware/xss-sanitizer.middle
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware, XssSanitizerMiddleware).forRoutes('*');
+    consumer.apply(LoggerMiddleware, XssSanitizerMiddleware).forRoutes('*path');
   }
 }
