@@ -13,8 +13,19 @@ export class MailService {
     const apiKey = this.configService.get<string>('RESEND_API_KEY');
     this.fromEmail =
       this.configService.get<string>('MAIL_FROM') || 'onboarding@resend.dev';
-    this.frontendUrl =
+    let rawFrontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+    // Render's fromService may inject just the service name without domain or protocol
+    if (rawFrontendUrl && !/^https?:\/\//i.test(rawFrontendUrl)) {
+      if (!rawFrontendUrl.includes('.')) {
+        this.logger.warn(
+          `FRONTEND_URL "${rawFrontendUrl}" looks like a bare service name. Appending ".onrender.com".`,
+        );
+        rawFrontendUrl = `${rawFrontendUrl}.onrender.com`;
+      }
+      rawFrontendUrl = `https://${rawFrontendUrl}`;
+    }
+    this.frontendUrl = rawFrontendUrl;
 
     if (apiKey) {
       this.resend = new Resend(apiKey);

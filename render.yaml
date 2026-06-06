@@ -56,6 +56,13 @@ services:
       - key: RESEND_API_KEY
         sync: false # User will provide their Resend API key in Render Dashboard
 
+      # Frontend URL for email links (password reset, verification, invitations)
+      - key: FRONTEND_URL
+        fromService:
+          name: business-tracking-web
+          type: web
+          property: host
+
       # CORS Origin restricted to the Web Frontend
       - key: CORS_ORIGIN
         fromService:

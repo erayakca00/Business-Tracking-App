@@ -30,6 +30,10 @@ if (rawApiUrl && !rawApiUrl.endsWith('/api/v1')) {
 // Fallback to relative path if not configured
 const API_URL = rawApiUrl || '/api/v1';
 
+// Backend origin for static file links (uploads, attachments).
+// Strip /api/v1 suffix to get the bare server URL.
+export const BACKEND_URL = API_URL.replace(/\/api\/v1$/, '') || '';
+
 const api = axios.create({
     baseURL: API_URL,
     headers: {
@@ -72,3 +76,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+export { API_URL };

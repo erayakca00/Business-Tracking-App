@@ -20,6 +20,13 @@ export const useSocket = (groupId?: string) => {
         let socketUrl = (import.meta as any).env.VITE_SOCKET_URL || 'http://localhost:3000';
         // Render injects the hostname without a protocol scheme — prepend https://
         if (socketUrl && !/^https?:\/\//i.test(socketUrl)) {
+            // Guard against Render injecting only the internal service name (no dots)
+            if (!socketUrl.includes('.')) {
+                console.warn(
+                    `[Socket] VITE_SOCKET_URL appears to be a bare service name ("${socketUrl}"). Appending ".onrender.com".`
+                );
+                socketUrl = `${socketUrl}.onrender.com`;
+            }
             socketUrl = `https://${socketUrl}`;
         }
         

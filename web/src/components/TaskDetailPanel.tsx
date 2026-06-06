@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Edit, Calendar, User, Tag, Clock, MessageCircle, ChevronDown, Trash2, Check, GitBranch, AlertCircle, ArrowRight, Paperclip, Download, Copy, Sparkles } from 'lucide-react';
-import api from '../services/api';
+import api, { BACKEND_URL } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 interface Comment {
@@ -1239,7 +1239,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <a href={`http://localhost:3000${att.url}`} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors" title="Download">
+                                                    <a href={`${BACKEND_URL}${att.url}`} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors" title="Download">
                                                         <Download size={14} />
                                                     </a>
                                                     {(isAdmin || att.userId === currentUserId) && (
