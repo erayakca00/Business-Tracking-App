@@ -9,6 +9,16 @@ let rawApiUrl = (import.meta as any).env.VITE_API_URL || '';
 // Without a protocol, axios treats it as a relative path and requests
 // go to the frontend origin instead of the backend.
 if (rawApiUrl && !/^https?:\/\//i.test(rawApiUrl)) {
+    // Guard against Render injecting only the internal service name (no dots)
+    // instead of the full public hostname. This happens when the backend
+    // service wasn't fully provisioned before the frontend build ran.
+    if (rawApiUrl && !rawApiUrl.includes('.')) {
+        console.warn(
+            `[api] VITE_API_URL appears to be an internal service name ("${rawApiUrl}"). ` +
+            'Appending ".onrender.com" as fallback. Redeploy the frontend to resolve.'
+        );
+        rawApiUrl = `${rawApiUrl}.onrender.com`;
+    }
     rawApiUrl = `https://${rawApiUrl}`;
 }
 
