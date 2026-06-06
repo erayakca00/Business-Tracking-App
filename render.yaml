@@ -13,8 +13,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: npm install && npm run build
-    preDeployCommand: npx typeorm migration:run -d dist/database/data-source.js
-    startCommand: npm run start:prod
+    startCommand: npx typeorm migration:run -d dist/database/data-source.js && npm run start:prod
     envVars:
       - key: PORT
         value: 3000
