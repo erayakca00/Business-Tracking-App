@@ -15,6 +15,7 @@ import { Group } from '../database/entities/group.entity';
 import { UserGroup, UserRole } from '../database/entities/user-group.entity';
 import { User } from '../database/entities/user.entity';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class InvitationsService {
@@ -28,6 +29,7 @@ export class InvitationsService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly mailService: MailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private async checkAdminPermission(
@@ -116,6 +118,16 @@ export class InvitationsService {
       currentUser.name,
       token,
     );
+
+    // Create in-app notification if the invited user already has an account
+    if (user) {
+      await this.notificationsService.createNotification({
+        userId: user.id,
+        actorId: currentUser.id,
+        type: 'group_invite',
+        message: `invited you to join the group "${group.name}"`,
+      });
+    }
 
     return savedInvitation;
   }
@@ -214,5 +226,50 @@ export class InvitationsService {
     await this.invitationRepository.save(invitation);
 
     return { groupId: invitation.groupId };
+  }
+
+  async getMyPendingInvitations(currentUser: User): Promise<any[]> {
+    const invitations = await this.invitationRepository.find({
+      where: {
+        email: currentUser.email.toLowerCase(),
+        status: InvitationStatus.PENDING,
+      },
+      relations: ['group', 'invitedBy'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Filter out expired invitations
+    return invitations
+      .filter((inv) => inv.expiresAt.getTime() > Date.now())
+      .map((inv) => ({
+        id: inv.id,
+        token: inv.token,
+        groupName: inv.group?.name || 'Unknown Group',
+        inviterName: inv.invitedBy?.name || 'An admin',
+        createdAt: inv.createdAt,
+        expiresAt: inv.expiresAt,
+      }));
+  }
+
+  async declineInvitation(
+    invitationId: string,
+    currentUser: User,
+  ): Promise<{ message: string }> {
+    const invitation = await this.invitationRepository.findOne({
+      where: { id: invitationId },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found.');
+    }
+
+    if (currentUser.email.toLowerCase() !== invitation.email.toLowerCase()) {
+      throw new ForbiddenException(
+        'This invitation was sent to a different email address.',
+      );
+    }
+
+    await this.invitationRepository.remove(invitation);
+    return { message: 'Invitation declined.' };
   }
 }

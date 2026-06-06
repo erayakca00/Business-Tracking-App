@@ -34,6 +34,18 @@ export class InvitationsController {
     return this.invitationsService.getInviteDetails(token);
   }
 
+  @Get('my-invitations')
+  @UseGuards(JwtAuthGuard)
+  async getMyPendingInvitations(@Request() req) {
+    return this.invitationsService.getMyPendingInvitations(req.user);
+  }
+
+  @Post('my-invitations/:id/decline')
+  @UseGuards(JwtAuthGuard)
+  async declineInvitation(@Param('id') id: string, @Request() req) {
+    return this.invitationsService.declineInvitation(id, req.user);
+  }
+
   @Post(':groupId/invite')
   @UseGuards(JwtAuthGuard)
   async invite(

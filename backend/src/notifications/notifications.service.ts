@@ -108,6 +108,8 @@ export class NotificationsService {
         return 'Task Status Updated 🔄';
       case 'priority_change':
         return 'Task Priority Updated ⚠️';
+      case 'group_invite':
+        return 'Group Invitation 📨';
       default:
         return 'Business Tracking';
     }

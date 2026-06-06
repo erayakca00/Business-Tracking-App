@@ -7,11 +7,13 @@ import { Group } from '../database/entities/group.entity';
 import { UserGroup } from '../database/entities/user-group.entity';
 import { User } from '../database/entities/user.entity';
 import { MailModule } from '../mail/mail.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Invitation, Group, UserGroup, User]),
     MailModule,
+    NotificationsModule,
   ],
   controllers: [InvitationsController],
   providers: [InvitationsService],
