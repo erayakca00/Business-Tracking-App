@@ -7,16 +7,23 @@ import {
     RefreshControl,
     Animated,
 } from 'react-native';
-import { Text, IconButton, ActivityIndicator, useTheme, Divider } from 'react-native-paper';
+import { Text, IconButton, ActivityIndicator, useTheme, Divider, Button } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet from '@gorhom/bottom-sheet';
+import Toast from 'react-native-toast-message';
 import {
     useGetNotificationsQuery,
     useMarkAsReadMutation,
     useMarkAllAsReadMutation,
     Notification,
 } from '../services/notificationsApi';
+import {
+    useGetMyPendingInvitationsQuery,
+    useAcceptInvitationMutation,
+    useDeclineInvitationMutation,
+    PendingInvitation,
+} from '../services/groupsApi';
 import TaskDetailSheet, { TaskForSheet } from '../components/TaskDetailSheet';
 
 import { useSelector } from 'react-redux';
@@ -163,6 +170,57 @@ const NotificationRow = ({ item, onPress, onMarkRead }: NotificationRowProps) =>
     );
 };
 
+interface InvitationRowProps {
+    item: PendingInvitation;
+    onAccept: (invitation: PendingInvitation) => void;
+    onDecline: (invitation: PendingInvitation) => void;
+    acceptingId: string | null;
+    decliningId: string | null;
+}
+
+const InvitationRow = ({ item, onAccept, onDecline, acceptingId, decliningId }: InvitationRowProps) => {
+    const theme = useTheme();
+    return (
+        <View style={[styles.invitationRow, { backgroundColor: theme.colors.primaryContainer + '10', borderLeftColor: theme.colors.primary }]}>
+            <View style={styles.avatarContainer}>
+                <View style={[styles.avatar, { backgroundColor: theme.colors.primaryContainer, width: 40, height: 40, borderRadius: 20 }]}>
+                    <IconButton icon="account-plus-outline" size={20} iconColor={theme.colors.onPrimaryContainer} style={{ margin: 0 }} />
+                </View>
+            </View>
+            <View style={styles.notifContent}>
+                <Text style={[styles.notifMessage, { color: theme.colors.onSurface, fontSize: 13, marginBottom: 2 }]}>
+                    <Text style={{ fontWeight: 'bold' }}>{item.inviterName}</Text> invited you to join <Text style={{ fontWeight: 'bold', color: theme.colors.primary }}>{item.groupName}</Text>
+                </Text>
+                <Text style={[styles.notifTime, { color: theme.colors.outline, marginBottom: 8 }]}>
+                    {formatRelativeTime(item.createdAt)}
+                </Text>
+                <View style={styles.actionButtonsContainer}>
+                    <Button
+                        mode="contained"
+                        onPress={() => onAccept(item)}
+                        loading={acceptingId === item.id}
+                        disabled={acceptingId !== null || decliningId !== null}
+                        style={styles.actionButton}
+                        labelStyle={{ fontSize: 12, marginVertical: 4, marginHorizontal: 8 }}
+                    >
+                        Accept
+                    </Button>
+                    <Button
+                        mode="outlined"
+                        onPress={() => onDecline(item)}
+                        loading={decliningId === item.id}
+                        disabled={acceptingId !== null || decliningId !== null}
+                        style={[styles.actionButton, { borderColor: theme.colors.outline }]}
+                        labelStyle={{ fontSize: 12, marginVertical: 4, marginHorizontal: 8 }}
+                    >
+                        Decline
+                    </Button>
+                </View>
+            </View>
+        </View>
+    );
+};
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 const NotificationSeparator = () => (
@@ -171,66 +229,10 @@ const NotificationSeparator = () => (
 
 type ListItemType =
     | { type: 'section'; label: string }
-    | { type: 'item'; data: Notification };
+    | { type: 'item'; data: Notification }
+    | { type: 'invitation'; data: PendingInvitation };
 
-const renderNotificationsContentHelper = ({
-    isLoading,
-    notifications,
-    theme,
-    listData,
-    renderItem,
-    isFetching,
-    refetch,
-}: {
-    isLoading: boolean;
-    notifications: Notification[];
-    theme: any;
-    listData: ListItemType[];
-    renderItem: (info: { item: ListItemType }) => React.ReactElement;
-    isFetching: boolean;
-    refetch: () => void;
-}) => {
-    if (isLoading) {
-        return (
-            <View style={styles.center}>
-                <ActivityIndicator size="large" />
-            </View>
-        );
-    }
 
-    if (notifications.length === 0) {
-        return (
-            <View style={styles.center}>
-                <IconButton icon="bell-sleep-outline" size={64} iconColor={theme.colors.outline} />
-                <Text style={[styles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>
-                    All caught up!
-                </Text>
-                <Text style={[styles.emptySubtitle, { color: theme.colors.outline }]}>
-                    You have no notifications yet.
-                </Text>
-            </View>
-        );
-    }
-
-    return (
-        <FlatList
-            data={listData}
-            renderItem={renderItem}
-            keyExtractor={(item) =>
-                item.type === 'section' ? `section-${item.label}` : item.data.id
-            }
-            contentContainerStyle={styles.listContent}
-            refreshControl={
-                <RefreshControl
-                    refreshing={isFetching && !isLoading}
-                    onRefresh={refetch}
-                    colors={[theme.colors.primary]}
-                />
-            }
-            ItemSeparatorComponent={NotificationSeparator}
-        />
-    );
-};
 
 const NotificationsScreen = () => {
     const theme = useTheme();
@@ -239,10 +241,23 @@ const NotificationsScreen = () => {
 
     const {
         data: notifications = [],
-        isLoading,
-        isFetching,
-        refetch,
+        isLoading: isNotificationsLoading,
+        isFetching: isNotificationsFetching,
+        refetch: refetchNotifications,
     } = useGetNotificationsQuery();
+
+    const {
+        data: pendingInvitations = [],
+        isLoading: isInvitationsLoading,
+        isFetching: isInvitationsFetching,
+        refetch: refetchInvitations,
+    } = useGetMyPendingInvitationsQuery();
+
+    const [acceptInvitation] = useAcceptInvitationMutation();
+    const [declineInvitation] = useDeclineInvitationMutation();
+
+    const [acceptingId, setAcceptingId] = useState<string | null>(null);
+    const [decliningId, setDecliningId] = useState<string | null>(null);
 
     const route = useRoute<any>();
     const initialTaskId = route.params?.taskId;
@@ -270,6 +285,47 @@ const NotificationsScreen = () => {
     const sheetRef = useRef<BottomSheet>(null);
     const [selectedTask, setSelectedTask] = useState<TaskForSheet | null>(null);
 
+    const handleAcceptInvitation = async (invitation: PendingInvitation) => {
+        setAcceptingId(invitation.id);
+        try {
+            await acceptInvitation({ token: invitation.token }).unwrap();
+            Toast.show({
+                type: 'success',
+                text1: 'Invitation Accepted',
+                text2: `You joined ${invitation.groupName}!`,
+            });
+        } catch (err: any) {
+            console.error('Failed to accept invitation:', err);
+            Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: err.data?.message || 'Failed to accept invitation',
+            });
+        } finally {
+            setAcceptingId(null);
+        }
+    };
+
+    const handleDeclineInvitation = async (invitation: PendingInvitation) => {
+        setDecliningId(invitation.id);
+        try {
+            await declineInvitation(invitation.id).unwrap();
+            Toast.show({
+                type: 'success',
+                text1: 'Invitation Declined',
+                text2: `Declined invite to ${invitation.groupName}`,
+            });
+        } catch (err: any) {
+            console.error('Failed to decline invitation:', err);
+            Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: err.data?.message || 'Failed to decline invitation',
+            });
+        } finally {
+            setDecliningId(null);
+        }
+    };
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -313,11 +369,18 @@ const NotificationsScreen = () => {
     const earlierItems = notifications.filter(n => new Date(n.createdAt) < today);
 
     const listData: ListItemType[] = [
+        ...(pendingInvitations.length > 0 ? [{ type: 'section' as const, label: 'Pending Invitations' }] : []),
+        ...pendingInvitations.map(inv => ({ type: 'invitation' as const, data: inv })),
         ...(todayItems.length > 0 ? [{ type: 'section' as const, label: 'Today' }] : []),
         ...todayItems.map(n => ({ type: 'item' as const, data: n })),
         ...(earlierItems.length > 0 ? [{ type: 'section' as const, label: 'Earlier' }] : []),
         ...earlierItems.map(n => ({ type: 'item' as const, data: n })),
     ];
+
+    const handleRefresh = () => {
+        refetchNotifications();
+        refetchInvitations();
+    };
 
     const renderItem = ({ item }: { item: ListItemType }) => {
         if (item.type === 'section') {
@@ -325,6 +388,17 @@ const NotificationsScreen = () => {
                 <Text style={[styles.sectionLabel, { color: theme.colors.outline }]}>
                     {item.label}
                 </Text>
+            );
+        }
+        if (item.type === 'invitation') {
+            return (
+                <InvitationRow
+                    item={item.data}
+                    onAccept={handleAcceptInvitation}
+                    onDecline={handleDeclineInvitation}
+                    acceptingId={acceptingId}
+                    decliningId={decliningId}
+                />
             );
         }
         return (
@@ -335,6 +409,9 @@ const NotificationsScreen = () => {
             />
         );
     };
+
+    const isOverallLoading = isNotificationsLoading || isInvitationsLoading;
+    const isOverallFetching = isNotificationsFetching || isInvitationsFetching;
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
@@ -375,15 +452,42 @@ const NotificationsScreen = () => {
                 </View>
 
                 {/* ── Content ── */}
-                {renderNotificationsContentHelper({
-                    isLoading,
-                    notifications,
-                    theme,
-                    listData,
-                    renderItem,
-                    isFetching,
-                    refetch,
-                })}
+                {isOverallLoading ? (
+                    <View style={styles.center}>
+                        <ActivityIndicator size="large" />
+                    </View>
+                ) : notifications.length === 0 && pendingInvitations.length === 0 ? (
+                    <View style={styles.center}>
+                        <IconButton icon="bell-sleep-outline" size={64} iconColor={theme.colors.outline} />
+                        <Text style={[styles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>
+                            All caught up!
+                        </Text>
+                        <Text style={[styles.emptySubtitle, { color: theme.colors.outline }]}>
+                            You have no notifications or invitations.
+                        </Text>
+                    </View>
+                ) : (
+                    <FlatList
+                        data={listData}
+                        renderItem={renderItem}
+                        keyExtractor={(item) =>
+                            item.type === 'section'
+                                ? `section-${item.label}`
+                                : item.type === 'invitation'
+                                ? `invite-${item.data.id}`
+                                : item.data.id
+                        }
+                        contentContainerStyle={styles.listContent}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={isOverallFetching && !isOverallLoading}
+                                onRefresh={handleRefresh}
+                                colors={[theme.colors.primary]}
+                            />
+                        }
+                        ItemSeparatorComponent={NotificationSeparator}
+                    />
+                )}
             </View>
 
             {/* ── Task Detail Sheet ── */}
@@ -515,6 +619,25 @@ const styles = StyleSheet.create({
     emptySubtitle: {
         fontSize: 13,
         marginTop: 6,
+    },
+    invitationRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderLeftWidth: 3,
+        gap: 12,
+    },
+    avatarContainer: {
+        flexShrink: 0,
+    },
+    actionButtonsContainer: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 4,
+    },
+    actionButton: {
+        borderRadius: 8,
     },
 });
 

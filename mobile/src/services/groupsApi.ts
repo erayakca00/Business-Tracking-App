@@ -70,8 +70,36 @@ export const groupsApi = api.injectEndpoints({
             }),
             invalidatesTags: ['Group'],
         }),
+        getMyPendingInvitations: builder.query<PendingInvitation[], void>({
+            query: () => '/groups/my-invitations',
+            providesTags: ['Notification', 'Group'],
+        }),
+        acceptInvitation: builder.mutation<any, { token: string }>({
+            query: ({ token }) => ({
+                url: '/groups/invite/accept',
+                method: 'POST',
+                body: { token },
+            }),
+            invalidatesTags: ['Group', 'Notification'],
+        }),
+        declineInvitation: builder.mutation<void, string>({
+            query: (invitationId) => ({
+                url: `/groups/my-invitations/${invitationId}/decline`,
+                method: 'POST',
+            }),
+            invalidatesTags: ['Notification'],
+        }),
     }),
 });
+
+export interface PendingInvitation {
+    id: string;
+    token: string;
+    groupName: string;
+    inviterName: string;
+    createdAt: string;
+    expiresAt: string;
+}
 
 export const {
     useGetGroupsQuery,
@@ -81,4 +109,7 @@ export const {
     useAddGroupMemberMutation,
     useRemoveGroupMemberMutation,
     useDeleteGroupMutation,
+    useGetMyPendingInvitationsQuery,
+    useAcceptInvitationMutation,
+    useDeclineInvitationMutation,
 } = groupsApi;

@@ -66,6 +66,8 @@ export class AuthService {
    */
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const { email, password } = loginDto;
+    console.log('[AuthService.login] email:', email);
+    console.log('[AuthService.login] password (received):', password);
 
     // Find user
     const user = await this.userRepository.findOne({
@@ -73,11 +75,16 @@ export class AuthService {
     });
 
     if (!user) {
+      console.log('[AuthService.login] User not found in database');
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    console.log('[AuthService.login] User found in database:', user.email);
+    console.log('[AuthService.login] Password hash in database:', user.password);
+
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log('[AuthService.login] Is password valid?:', isPasswordValid);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
