@@ -8,12 +8,14 @@ import { UsersModule } from '../users/users.module';
 import { Task } from '../database/entities/task.entity';
 import { TimeLog } from '../database/entities/time-log.entity';
 import { SprintsModule } from '../sprints/sprints.module';
+import { InvitationsModule } from '../invitations/invitations.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Group, UserGroup, Task, TimeLog]),
     UsersModule,
     SprintsModule,
+    InvitationsModule,
   ],
   controllers: [GroupsController],
   providers: [GroupsService],
