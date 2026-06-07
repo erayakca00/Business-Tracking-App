@@ -139,7 +139,7 @@ export class AuthService {
 
     if (
       !user?.resetTokenExpiry ||
-      user.resetTokenExpiry.getTime() < Date.now()
+      new Date(user.resetTokenExpiry).getTime() < Date.now()
     ) {
       throw new BadRequestException('Invalid or expired reset token.');
     }

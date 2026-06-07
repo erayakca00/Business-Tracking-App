@@ -797,7 +797,7 @@ ${commentsStr}`;
       activeLog.duration = Math.max(
         0,
         Math.round(
-          (activeLog.endedAt.getTime() - activeLog.startedAt.getTime()) / 1000,
+          (new Date(activeLog.endedAt).getTime() - new Date(activeLog.startedAt).getTime()) / 1000,
         ),
       );
       await this.timeLogRepository.save(activeLog);
@@ -828,7 +828,7 @@ ${commentsStr}`;
     activeLog.duration = Math.max(
       0,
       Math.round(
-        (activeLog.endedAt.getTime() - activeLog.startedAt.getTime()) / 1000,
+        (new Date(activeLog.endedAt).getTime() - new Date(activeLog.startedAt).getTime()) / 1000,
       ),
     );
     return this.timeLogRepository.save(activeLog);

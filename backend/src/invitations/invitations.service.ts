@@ -171,7 +171,7 @@ export class InvitationsService {
 
     if (
       invitation?.status !== InvitationStatus.PENDING ||
-      invitation.expiresAt.getTime() < Date.now()
+      new Date(invitation.expiresAt).getTime() < Date.now()
     ) {
       throw new BadRequestException('Invitation is invalid or has expired.');
     }
@@ -196,7 +196,7 @@ export class InvitationsService {
 
     if (
       invitation?.status !== InvitationStatus.PENDING ||
-      invitation.expiresAt.getTime() < Date.now()
+      new Date(invitation.expiresAt).getTime() < Date.now()
     ) {
       throw new BadRequestException('Invitation is invalid or has expired.');
     }
@@ -240,7 +240,7 @@ export class InvitationsService {
 
     // Filter out expired invitations
     return invitations
-      .filter((inv) => inv.expiresAt.getTime() > Date.now())
+      .filter((inv) => new Date(inv.expiresAt).getTime() > Date.now())
       .map((inv) => ({
         id: inv.id,
         token: inv.token,
