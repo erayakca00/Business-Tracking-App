@@ -4,10 +4,7 @@ import { logout } from '../features/auth/authSlice';
 
 // Android Emulator basic localhost mapping is 10.0.2.2
 // For physical device, you must use your computer's LAN IP address (e.g., 192.168.1.x)
-const PRODUCTION_URL = 'https://business-tracking-backend.onrender.com/api/v1';
-const DEVELOPMENT_URL = 'http://192.168.0.11:3000/api/v1';
-
-export const BASE_URL = __DEV__ ? DEVELOPMENT_URL : PRODUCTION_URL;
+export const BASE_URL = 'https://business-tracking-backend.onrender.com/api/v1';
 
 const baseQuery = fetchBaseQuery({
     baseUrl: BASE_URL,
