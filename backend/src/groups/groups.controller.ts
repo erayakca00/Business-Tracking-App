@@ -14,6 +14,7 @@ import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AddUserToGroupDto } from './dto/add-user.dto';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InvitationsService } from '../invitations/invitations.service';
 import { InviteUserDto, AcceptInviteDto } from '../invitations/dto/invite.dto';
@@ -162,6 +163,27 @@ export class GroupsController {
     @Request() req,
   ) {
     return this.groupsService.removeUser(id, userId, req.user);
+  }
+
+  @Patch(':id/users/:userId/role')
+  @UseGuards(JwtAuthGuard)
+  updateMemberRole(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateMemberRoleDto,
+    @Request() req,
+  ) {
+    return this.groupsService.updateMemberRole(id, userId, dto.role, req.user);
+  }
+
+  @Post(':id/transfer-ownership/:userId')
+  @UseGuards(JwtAuthGuard)
+  transferOwnership(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Request() req,
+  ) {
+    return this.groupsService.transferOwnership(id, userId, req.user);
   }
 
   @Get(':id/analytics')

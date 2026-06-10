@@ -63,6 +63,21 @@ export const groupsApi = api.injectEndpoints({
             }),
             invalidatesTags: (result, error, { groupId }) => [{ type: 'GroupMember', id: groupId }, 'Group'],
         }),
+        updateMemberRole: builder.mutation<any, { groupId: string; userId: string; role: 'admin' | 'member' }>({
+            query: ({ groupId, userId, role }) => ({
+                url: `/groups/${groupId}/users/${userId}/role`,
+                method: 'PATCH',
+                body: { role },
+            }),
+            invalidatesTags: (result, error, { groupId }) => [{ type: 'GroupMember', id: groupId }],
+        }),
+        transferOwnership: builder.mutation<any, { groupId: string; userId: string }>({
+            query: ({ groupId, userId }) => ({
+                url: `/groups/${groupId}/transfer-ownership/${userId}`,
+                method: 'POST',
+            }),
+            invalidatesTags: (result, error, { groupId }) => [{ type: 'GroupMember', id: groupId }, { type: 'Group', id: groupId }, 'Group'],
+        }),
         deleteGroup: builder.mutation<void, string>({
             query: (id) => ({
                 url: `/groups/${id}`,
@@ -108,6 +123,8 @@ export const {
     useGetGroupMembersQuery,
     useAddGroupMemberMutation,
     useRemoveGroupMemberMutation,
+    useUpdateMemberRoleMutation,
+    useTransferOwnershipMutation,
     useDeleteGroupMutation,
     useGetMyPendingInvitationsQuery,
     useAcceptInvitationMutation,

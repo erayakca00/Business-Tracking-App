@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import api from '../services/api';
-import { UserMinus, Trash2 } from 'lucide-react';
+import { UserMinus, Trash2, ShieldCheck, ShieldOff, Crown } from 'lucide-react';
 
 interface GroupSettingsModalProps {
     isOpen: boolean;
@@ -10,12 +10,13 @@ interface GroupSettingsModalProps {
     members: any[];
     isAdmin: boolean;
     isOwner: boolean;
+    ownerId?: string;
     onSettingsChanged: () => void;
     onDeleteGroup: () => void;
     currentUserId?: string;
 }
 
-const GroupSettingsModal = ({ isOpen, onClose, groupId, members, isAdmin, isOwner, onSettingsChanged, onDeleteGroup, currentUserId }: GroupSettingsModalProps) => {
+const GroupSettingsModal = ({ isOpen, onClose, groupId, members, isAdmin, isOwner, ownerId, onSettingsChanged, onDeleteGroup, currentUserId }: GroupSettingsModalProps) => {
     const [email, setEmail] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -101,6 +102,25 @@ const GroupSettingsModal = ({ isOpen, onClose, groupId, members, isAdmin, isOwne
         }
     };
 
+    const handleChangeRole = async (userId: string, role: 'admin' | 'member') => {
+        try {
+            await api.patch(`/groups/${groupId}/users/${userId}/role`, { role });
+            onSettingsChanged();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to update role');
+        }
+    };
+
+    const handleTransferOwnership = async (userId: string, name: string) => {
+        if (!globalThis.confirm(`Transfer group ownership to ${name}? You will remain an admin but lose owner privileges.`)) return;
+        try {
+            await api.post(`/groups/${groupId}/transfer-ownership/${userId}`);
+            onSettingsChanged();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to transfer ownership');
+        }
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Group Settings">
             <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
@@ -163,19 +183,55 @@ const GroupSettingsModal = ({ isOpen, onClose, groupId, members, isAdmin, isOwne
                                     <div>
                                         <p className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
                                             {member.name}
-                                            {member.role === 'admin' && <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 text-[10px] font-bold rounded uppercase">Admin</span>}
+                                            {ownerId && member.userId === ownerId ? (
+                                                <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded uppercase">Owner</span>
+                                            ) : member.role === 'admin' ? (
+                                                <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 text-[10px] font-bold rounded uppercase">Admin</span>
+                                            ) : null}
                                         </p>
                                         <p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p>
                                     </div>
-                                    {isAdmin && member.userId !== currentUserId && member.role !== 'admin' && (
-                                        <button
-                                            onClick={() => handleRemoveMember(member.userId)}
-                                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                                            title="Remove Member"
-                                        >
-                                            <UserMinus size={18} />
-                                        </button>
-                                    )}
+                                    <div className="flex items-center gap-1">
+                                        {/* Owner-only role controls (cannot target self / the owner row) */}
+                                        {isOwner && member.userId !== currentUserId && member.userId !== ownerId && (
+                                            <>
+                                                {member.role === 'member' ? (
+                                                    <button
+                                                        onClick={() => handleChangeRole(member.userId, 'admin')}
+                                                        className="text-gray-400 hover:text-purple-600 transition-colors p-1"
+                                                        title="Make Admin"
+                                                    >
+                                                        <ShieldCheck size={18} />
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handleChangeRole(member.userId, 'member')}
+                                                        className="text-gray-400 hover:text-purple-600 transition-colors p-1"
+                                                        title="Demote to Member"
+                                                    >
+                                                        <ShieldOff size={18} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => handleTransferOwnership(member.userId, member.name)}
+                                                    className="text-gray-400 hover:text-amber-500 transition-colors p-1"
+                                                    title="Transfer Ownership"
+                                                >
+                                                    <Crown size={18} />
+                                                </button>
+                                            </>
+                                        )}
+                                        {/* Remove control: any admin can remove a non-admin; the owner can never be removed */}
+                                        {isAdmin && member.userId !== currentUserId && member.userId !== ownerId && member.role !== 'admin' && (
+                                            <button
+                                                onClick={() => handleRemoveMember(member.userId)}
+                                                className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                                                title="Remove Member"
+                                            >
+                                                <UserMinus size={18} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </li>
                             ))}
                         </ul>

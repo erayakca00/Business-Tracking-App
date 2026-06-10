@@ -551,6 +551,7 @@ const GroupDetails = () => {
                 members={members}
                 isAdmin={isAdmin}
                 isOwner={isOwner}
+                ownerId={group?.owner?.id}
                 onSettingsChanged={fetchData}
                 onDeleteGroup={handleDeleteGroup}
                 currentUserId={user?.id}

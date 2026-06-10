@@ -245,6 +245,12 @@ export class GroupsService {
       throw new NotFoundException('Member not found in this group');
     }
 
+    // The group owner can never be removed from the group
+    const group = await this.groupRepository.findOne({ where: { id: groupId } });
+    if (group && group.ownerId === userId) {
+      throw new ForbiddenException('The group owner cannot be removed');
+    }
+
     // Unassign user from all tasks in this group
     await this.taskRepository.update(
       { groupId, assignedToId: userId },
@@ -252,6 +258,109 @@ export class GroupsService {
     );
 
     await this.userGroupRepository.remove(memberToRemove);
+  }
+
+  /**
+   * Promotes a member to admin or demotes an admin back to member.
+   * Only the group owner may change roles. The owner's own role is fixed.
+   */
+  async updateMemberRole(
+    groupId: string,
+    userId: string,
+    role: UserRole,
+    currentUser: User,
+  ): Promise<{ message: string }> {
+    const group = await this.groupRepository.findOne({ where: { id: groupId } });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    // Only the owner can change member roles
+    if (group.ownerId !== currentUser.id) {
+      throw new ForbiddenException(
+        'Only the group owner can change member roles',
+      );
+    }
+
+    // The owner's role cannot be changed (always effectively admin)
+    if (userId === group.ownerId) {
+      throw new BadRequestException("The owner's role cannot be changed");
+    }
+
+    if (role !== UserRole.ADMIN && role !== UserRole.MEMBER) {
+      throw new BadRequestException('Invalid role');
+    }
+
+    const member = await this.userGroupRepository.findOne({
+      where: { userId, groupId },
+    });
+    if (!member) {
+      throw new NotFoundException('Member not found in this group');
+    }
+
+    member.role = role;
+    await this.userGroupRepository.save(member);
+
+    return {
+      message:
+        role === UserRole.ADMIN
+          ? 'Member promoted to admin'
+          : 'Admin demoted to member',
+    };
+  }
+
+  /**
+   * Transfers group ownership to another member of the group.
+   * Only the current owner may transfer ownership. The new owner is made an
+   * admin; the previous owner is kept as an admin (not removed).
+   */
+  async transferOwnership(
+    groupId: string,
+    newOwnerId: string,
+    currentUser: User,
+  ): Promise<{ message: string }> {
+    const group = await this.groupRepository.findOne({ where: { id: groupId } });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    if (group.ownerId !== currentUser.id) {
+      throw new ForbiddenException(
+        'Only the current owner can transfer ownership',
+      );
+    }
+
+    if (newOwnerId === group.ownerId) {
+      throw new BadRequestException('This user is already the owner');
+    }
+
+    // The new owner must be an existing member of the group
+    const newOwnerMembership = await this.userGroupRepository.findOne({
+      where: { userId: newOwnerId, groupId },
+    });
+    if (!newOwnerMembership) {
+      throw new NotFoundException('Target user is not a member of this group');
+    }
+
+    // Promote the new owner to admin
+    if (newOwnerMembership.role !== UserRole.ADMIN) {
+      newOwnerMembership.role = UserRole.ADMIN;
+      await this.userGroupRepository.save(newOwnerMembership);
+    }
+
+    // The previous owner remains in the group as an admin
+    const previousOwnerMembership = await this.userGroupRepository.findOne({
+      where: { userId: group.ownerId, groupId },
+    });
+    if (previousOwnerMembership) {
+      previousOwnerMembership.role = UserRole.ADMIN;
+      await this.userGroupRepository.save(previousOwnerMembership);
+    }
+
+    group.ownerId = newOwnerId;
+    await this.groupRepository.save(group);
+
+    return { message: 'Ownership transferred successfully' };
   }
 
   async getAnalytics(groupId: string, user: User): Promise<any> {

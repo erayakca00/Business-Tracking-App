@@ -1,6 +1,6 @@
 /* eslint-disable react-native/no-inline-styles, react/no-unstable-nested-components */
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, FlatList, RefreshControl, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -9,7 +9,7 @@ import { Text, Card, FAB as PaperFAB, Portal, Modal, TextInput, Button, Activity
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { useGetTasksByGroupQuery, useCreateTaskMutation, useUpdateTaskMutation, useDeleteTaskMutation } from '../services/tasksApi';
-import { useGetGroupByIdQuery, useGetGroupMembersQuery, useAddGroupMemberMutation, useRemoveGroupMemberMutation, useDeleteGroupMutation } from '../services/groupsApi';
+import { useGetGroupByIdQuery, useGetGroupMembersQuery, useAddGroupMemberMutation, useRemoveGroupMemberMutation, useUpdateMemberRoleMutation, useTransferOwnershipMutation, useDeleteGroupMutation } from '../services/groupsApi';
 import { RootState } from '../app/store';
 import TaskDetailSheet, { TaskForSheet } from '../components/TaskDetailSheet';
 import { useSocket } from '../hooks/useSocket';
@@ -438,8 +438,12 @@ const renderMembersListModalHelper = ({
     members,
     theme,
     isAdmin,
+    isOwner,
+    ownerId,
     currentUserId,
     onRemoveMember,
+    onChangeRole,
+    onTransferOwnership,
     onOpenInvite,
 }: {
     visible: boolean;
@@ -447,8 +451,12 @@ const renderMembersListModalHelper = ({
     members: any[] | undefined;
     theme: any;
     isAdmin: boolean;
+    isOwner: boolean;
+    ownerId: string | undefined;
     currentUserId: string | undefined;
     onRemoveMember: (userId: string) => void;
+    onChangeRole: (userId: string, role: 'admin' | 'member') => void;
+    onTransferOwnership: (userId: string, name: string) => void;
     onOpenInvite: () => void;
 }) => (
     <Modal 
@@ -473,19 +481,38 @@ const renderMembersListModalHelper = ({
                         <View style={{ marginLeft: 12 }}>
                             <Text variant="bodyLarge" style={{ fontWeight: '500' }}>{member.name}</Text>
                             <Text variant="bodySmall" style={{ color: theme.colors.outline }}>
-                                {member.role === 'admin' ? 'Admin' : 'Member'}
+                                {member.userId === ownerId ? 'Owner' : member.role === 'admin' ? 'Admin' : 'Member'}
                             </Text>
                         </View>
                     </View>
 
-                    {isAdmin && member.userId !== currentUserId && (
-                        <IconButton
-                            icon="delete-outline"
-                            iconColor={theme.colors.error}
-                            size={20}
-                            onPress={() => onRemoveMember(member.userId)}
-                        />
-                    )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {/* Owner-only role controls (not on self / the owner row) */}
+                        {isOwner && member.userId !== currentUserId && member.userId !== ownerId && (
+                            <>
+                                <IconButton
+                                    icon={member.role === 'admin' ? 'shield-off-outline' : 'shield-account-outline'}
+                                    iconColor={theme.colors.primary}
+                                    size={20}
+                                    onPress={() => onChangeRole(member.userId, member.role === 'admin' ? 'member' : 'admin')}
+                                />
+                                <IconButton
+                                    icon="crown-outline"
+                                    iconColor="#d97706"
+                                    size={20}
+                                    onPress={() => onTransferOwnership(member.userId, member.name)}
+                                />
+                            </>
+                        )}
+                        {isAdmin && member.userId !== currentUserId && member.userId !== ownerId && member.role !== 'admin' && (
+                            <IconButton
+                                icon="delete-outline"
+                                iconColor={theme.colors.error}
+                                size={20}
+                                onPress={() => onRemoveMember(member.userId)}
+                            />
+                        )}
+                    </View>
                 </View>
             ))}
         </ScrollView>
@@ -957,6 +984,8 @@ const GroupDetailsScreen = () => {
     const [deleteTask] = useDeleteTaskMutation();
     const [addMember] = useAddGroupMemberMutation();
     const [removeMember] = useRemoveGroupMemberMutation();
+    const [updateMemberRole] = useUpdateMemberRoleMutation();
+    const [transferOwnership] = useTransferOwnershipMutation();
     const [deleteGroup] = useDeleteGroupMutation();
 
     const { socket, connected } = useSocket(groupId);
@@ -1490,7 +1519,52 @@ const GroupDetailsScreen = () => {
         }
     };
 
+    const handleChangeRole = async (userId: string, role: 'admin' | 'member') => {
+        try {
+            await updateMemberRole({ groupId, userId, role }).unwrap();
+            Toast.show({
+                type: 'success',
+                text1: 'Success',
+                text2: role === 'admin' ? 'Member promoted to admin' : 'Admin demoted to member',
+            });
+        } catch (err: any) {
+            Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: err.data?.message || 'Failed to update role',
+            });
+        }
+    };
 
+    const handleTransferOwnership = (userId: string, name: string) => {
+        Alert.alert(
+            'Transfer Ownership',
+            `Transfer group ownership to ${name}? You will remain an admin but lose owner privileges.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Transfer',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await transferOwnership({ groupId, userId }).unwrap();
+                            Toast.show({
+                                type: 'success',
+                                text1: 'Success',
+                                text2: 'Ownership transferred successfully',
+                            });
+                        } catch (err: any) {
+                            Toast.show({
+                                type: 'error',
+                                text1: 'Error',
+                                text2: err.data?.message || 'Failed to transfer ownership',
+                            });
+                        }
+                    },
+                },
+            ],
+        );
+    };
 
     const handleStatusChange = async (taskId: string, newStatus: TaskStatusType) => {
         try {
@@ -1602,8 +1676,12 @@ const GroupDetailsScreen = () => {
                     members,
                     theme,
                     isAdmin,
+                    isOwner,
+                    ownerId: group?.ownerId,
                     currentUserId,
                     onRemoveMember: handleRemoveMember,
+                    onChangeRole: handleChangeRole,
+                    onTransferOwnership: handleTransferOwnership,
                     onOpenInvite: () => {
                         setMembersListModalVisible(false);
                         setMemberModalVisible(true);
