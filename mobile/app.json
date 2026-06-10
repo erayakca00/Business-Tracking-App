@@ -13,6 +13,14 @@
     "plugins": [
       "@react-native-community/datetimepicker"
     ],
-    "owner": "erayakca00"
+    "owner": "erayakca00",
+    "ios": {
+      "bundleIdentifier": "com.erayakca00.businesstrackingapp",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.erayakca00.businesstrackingapp",
+      "googleServicesFile": "./google-services.json"
+    }
   }
 }
