@@ -43,20 +43,25 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user (pre-verified as requested)
+    // Generate an email verification token; account stays unverified until confirmed
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
     const user = this.userRepository.create({
       email,
       password: hashedPassword,
       name,
       skills: skills || [],
-      isVerified: true,
-      verificationToken: null,
+      isVerified: false,
+      verificationToken,
     });
 
     await this.userRepository.save(user);
 
+    await this.mailService.sendVerificationEmail(email, verificationToken);
+
     return {
-      message: 'Registration successful. You can now log in immediately.',
+      message:
+        'Registration successful. Please check your email to verify your account before logging in.',
     };
   }
 
@@ -66,8 +71,6 @@ export class AuthService {
    */
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const { email, password } = loginDto;
-    console.log('[AuthService.login] email:', email);
-    console.log('[AuthService.login] password (received):', password);
 
     // Find user
     const user = await this.userRepository.findOne({
@@ -75,22 +78,22 @@ export class AuthService {
     });
 
     if (!user) {
-      console.log('[AuthService.login] User not found in database');
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    console.log('[AuthService.login] User found in database:', user.email);
-    console.log('[AuthService.login] Password hash in database:', user.password);
-
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log('[AuthService.login] Is password valid?:', isPasswordValid);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Verification check disabled for local/non-email setup
+    // Block login until the email address has been verified
+    if (!user.isVerified) {
+      throw new UnauthorizedException(
+        'Please verify your email address before logging in. Check your inbox for the verification link.',
+      );
+    }
 
     // Generate JWT token
     const payload: JwtPayload = { sub: user.id, email: user.email };

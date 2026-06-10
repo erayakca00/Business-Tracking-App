@@ -14,7 +14,7 @@ import { User } from '../database/entities/user.entity';
 import { SprintSnapshot } from '../database/entities/sprint-snapshot.entity';
 import { CreateSprintDto } from './dto/create-sprint.dto';
 import { UpdateSprintDto } from './dto/update-sprint.dto';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 
 @Injectable()
 export class SprintsService {
@@ -253,9 +253,9 @@ export class SprintsService {
 
   /**
    * Captures a performance snapshot for all active sprints globally.
-   * Triggered automatically at midnight via Cron scheduler.
+   * Triggered automatically every day at 23:00 via Cron scheduler.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron('0 23 * * *')
   async recordDailySnapshots() {
     this.logger.log('[Cron] Capturing daily active sprint snapshots...');
     const activeSprints = await this.sprintRepository.find({

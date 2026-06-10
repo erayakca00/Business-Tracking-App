@@ -39,7 +39,7 @@ const Register = () => {
                             Account Created!
                         </h2>
                         <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                            Your account <strong className="text-gray-900 dark:text-white">{email}</strong> has been successfully created. You can now log in immediately.
+                            Your account <strong className="text-gray-900 dark:text-white">{email}</strong> has been successfully created. We've sent a verification link to your email — please verify your address before logging in.
                         </p>
                         <div className="mt-6">
                             <Link

@@ -7,13 +7,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import { Text, Card, FAB as PaperFAB, Portal, Modal, TextInput, Button, ActivityIndicator, Chip, Menu, Dialog, useTheme, IconButton } from 'react-native-paper';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { useGetTasksByGroupQuery, useCreateTaskMutation, useUpdateTaskMutation, useDeleteTaskMutation } from '../services/tasksApi';
 import { useGetGroupByIdQuery, useGetGroupMembersQuery, useAddGroupMemberMutation, useRemoveGroupMemberMutation, useDeleteGroupMutation } from '../services/groupsApi';
 import { RootState } from '../app/store';
 import TaskDetailSheet, { TaskForSheet } from '../components/TaskDetailSheet';
 import { useSocket } from '../hooks/useSocket';
 import { useGetTemplatesByGroupQuery } from '../services/templatesApi';
+import { commentsApi } from '../services/commentsApi';
 
 type RouteParams = {
     GroupDetails: {
@@ -959,6 +960,7 @@ const GroupDetailsScreen = () => {
     const [deleteGroup] = useDeleteGroupMutation();
 
     const { socket, connected } = useSocket(groupId);
+    const dispatch = useDispatch();
 
     React.useEffect(() => {
         if (!socket) return;
@@ -967,16 +969,32 @@ const GroupDetailsScreen = () => {
             refetchTasks();
         };
 
+        // When a comment changes in this group, invalidate the cached comment
+        // list for the affected task so an open Comments tab refreshes live.
+        const handleCommentEvent = (payload: { taskId?: string }) => {
+            if (payload?.taskId) {
+                dispatch(
+                    commentsApi.util.invalidateTags([
+                        { type: 'Comment', id: `LIST_${payload.taskId}` },
+                    ]),
+                );
+            }
+        };
+
         socket.on('task:created', handleWebSocketEvent);
         socket.on('task:updated', handleWebSocketEvent);
         socket.on('task:deleted', handleWebSocketEvent);
+        socket.on('comment:created', handleCommentEvent);
+        socket.on('comment:deleted', handleCommentEvent);
 
         return () => {
             socket.off('task:created', handleWebSocketEvent);
             socket.off('task:updated', handleWebSocketEvent);
             socket.off('task:deleted', handleWebSocketEvent);
+            socket.off('comment:created', handleCommentEvent);
+            socket.off('comment:deleted', handleCommentEvent);
         };
-    }, [socket, refetchTasks]);
+    }, [socket, refetchTasks, dispatch]);
 
     const isOwner = group?.ownerId === currentUserId;
 

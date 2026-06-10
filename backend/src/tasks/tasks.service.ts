@@ -293,8 +293,16 @@ export class TasksService {
       );
     }
 
+    // No-op if the assignee is unchanged
+    const currentAssigneeId = task.assignedTo?.id ?? null;
+    if (currentAssigneeId === updateTaskDto.assignedToId) return;
+
     if (updateTaskDto.assignedToId === null) {
       task.assignedTo = null as any;
+      await this.logActivity(task.id, user.id, 'assignee_changed', {
+        from: currentAssigneeId ?? undefined,
+        to: undefined,
+      });
     } else {
       const assigneeGroup = await this.userGroupRepository.findOne({
         where: { userId: updateTaskDto.assignedToId, groupId: task.group.id },
@@ -303,6 +311,11 @@ export class TasksService {
         throw new BadRequestException('Assignee is not a member of this group');
       }
       task.assignedTo = { id: updateTaskDto.assignedToId } as User;
+
+      await this.logActivity(task.id, user.id, 'assignee_changed', {
+        from: currentAssigneeId ?? undefined,
+        to: updateTaskDto.assignedToId,
+      });
 
       await this.notificationsService.createNotification({
         userId: updateTaskDto.assignedToId,
@@ -340,6 +353,18 @@ export class TasksService {
       from: task.status,
       to: updateTaskDto.status,
     });
+
+    // Notify the assignee (if someone other than the actor) of the status change
+    if (task.assignedTo?.id && task.assignedTo.id !== user.id) {
+      await this.notificationsService.createNotification({
+        userId: task.assignedTo.id,
+        actorId: user.id,
+        type: 'status_change',
+        message: `Status of "${task.title}" changed to ${updateTaskDto.status}`,
+        taskId: task.id,
+      });
+    }
+
     task.status = updateTaskDto.status;
     if (task.status === TaskStatus.DONE) {
       task.completedAt = new Date();
@@ -372,6 +397,18 @@ export class TasksService {
         from: task.priority,
         to: updateTaskDto.priority,
       });
+
+      // Notify the assignee (if someone other than the actor) of the priority change
+      if (task.assignedTo?.id && task.assignedTo.id !== user.id) {
+        await this.notificationsService.createNotification({
+          userId: task.assignedTo.id,
+          actorId: user.id,
+          type: 'priority_change',
+          message: `Priority of "${task.title}" changed to ${updateTaskDto.priority}`,
+          taskId: task.id,
+        });
+      }
+
       task.priority = updateTaskDto.priority;
     }
     if (

@@ -99,6 +99,7 @@ export class NotificationsService {
   private getNotificationTitle(type: string): string {
     switch (type) {
       case 'assigned':
+      case 'task_assigned':
         return 'Task Assigned 📋';
       case 'mention':
         return 'New Mention 💬';

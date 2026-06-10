@@ -52,13 +52,34 @@ export class CommentsService {
     });
 
     // Parse mentions e.g. @Eray Akça
-    await this.parseAndNotifyMentions(dto.content, taskId, user.id);
+    const mentionedUserIds = await this.parseAndNotifyMentions(
+      dto.content,
+      taskId,
+      user.id,
+    );
 
     // Reload with author and task relation for broadcasting
     const fullComment = (await this.commentsRepository.findOne({
       where: { id: saved.id },
-      relations: ['author', 'task', 'task.group'],
+      relations: ['author', 'task', 'task.group', 'task.assignedTo'],
     })) as Comment;
+
+    // Notify the task's assignee about the new comment — unless they are the
+    // commenter or were already notified via an @mention (avoid duplicates).
+    const assigneeId = fullComment.task?.assignedTo?.id;
+    if (
+      assigneeId &&
+      assigneeId !== user.id &&
+      !mentionedUserIds.has(assigneeId)
+    ) {
+      await this.notificationsService.createNotification({
+        userId: assigneeId,
+        actorId: user.id,
+        type: 'comment',
+        message: `New comment on your task: "${fullComment.task?.title}"`,
+        taskId,
+      });
+    }
 
     // Broadcast comment creation via WebSockets
     try {
@@ -83,8 +104,9 @@ export class CommentsService {
     content: string,
     taskId: string,
     actorId: string,
-  ) {
-    if (!content) return;
+  ): Promise<Set<string>> {
+    const notified = new Set<string>();
+    if (!content) return notified;
 
     // Simple regex: match @ followed by word characters or spaces until next @ or newline.
     // Actually, frontend will probably format it clearly, but let's assume raw text like "@Eray Akça "
@@ -101,8 +123,10 @@ export class CommentsService {
           message: `mentioned you in a comment`,
           taskId: taskId,
         });
+        notified.add(u.id);
       }
     }
+    return notified;
   }
 
   async update(id: string, dto: UpdateCommentDto, user: any): Promise<Comment> {
