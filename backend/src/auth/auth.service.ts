@@ -43,25 +43,24 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate an email verification token; account stays unverified until confirmed
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-
+    // NOTE: E-posta doğrulaması, Resend tarafında doğrulanmış bir alan adı
+    // (domain) bulunmadığından geçici olarak devre dışıdır — bu nedenle yeni
+    // hesaplar doğrudan doğrulanmış (isVerified=true) olarak oluşturulur.
+    // Bir domain doğrulandığında, aşağıdaki blok eski haline (isVerified=false
+    // + doğrulama e-postası gönderimi) döndürülebilir.
     const user = this.userRepository.create({
       email,
       password: hashedPassword,
       name,
       skills: skills || [],
-      isVerified: false,
-      verificationToken,
+      isVerified: true,
+      verificationToken: null,
     });
 
     await this.userRepository.save(user);
 
-    await this.mailService.sendVerificationEmail(email, verificationToken);
-
     return {
-      message:
-        'Registration successful. Please check your email to verify your account before logging in.',
+      message: 'Registration successful. You can now log in.',
     };
   }
 
@@ -88,12 +87,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Block login until the email address has been verified
-    if (!user.isVerified) {
-      throw new UnauthorizedException(
-        'Please verify your email address before logging in. Check your inbox for the verification link.',
-      );
-    }
+    // E-posta doğrulama kontrolü, doğrulama akışı devre dışı olduğu için
+    // şimdilik uygulanmamaktadır (bkz. register notu).
 
     // Generate JWT token
     const payload: JwtPayload = { sub: user.id, email: user.email };
